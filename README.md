@@ -5,6 +5,8 @@ sending organizations in Vietnam, Myanmar, Bangladesh and Indonesia manage the
 履歴書 (rirekisho), self-introduction videos and profile of each trainee, and send
 password-protected, view-only links to clients in Japan with view tracking.
 
+**Live demo:** https://bangdh.github.io/rireki/ (GitHub Pages, redeployed by `.github/workflows/pages.yml` on every push to `main`).
+
 ## Open the mockups
 
 No build step. Open `index.html` in a browser, or serve the folder:
