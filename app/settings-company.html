@@ -92,11 +92,10 @@
         </section>
         <section class="card">
           <div class="card-header"><h2 data-i18n="settings.code_t">Candidate code format</h2></div>
-          <div class="card-body form-grid-3">
-            <div class="field"><label class="label" data-i18n="settings.code_prefix">Prefix</label><input class="input mono" value="SV"></div>
-            <div class="field"><label class="label" data-i18n="settings.code_year">Include year</label><select class="select"><option data-i18n="common.yes">Yes</option><option data-i18n="common.no">No</option></select></div>
-            <div class="field"><label class="label" data-i18n="settings.code_digits">Sequence digits</label><select class="select"><option>4</option><option>5</option><option>6</option></select></div>
-            <div class="span-3 small muted"><span data-i18n="settings.code_preview">Next code will be</span> <code>SV-2024-0231</code></div>
+          <div class="card-body form-grid">
+            <div class="field"><label class="label" data-i18n="settings.code_prefix">Prefix (2 capital letters)</label><input class="input mono" value="SV" maxlength="2" pattern="[A-Z]{2}" style="text-transform:uppercase"><span class="hint" data-i18n="settings.code_prefix_hint">A–Z only. Changing it affects new candidates only.</span></div>
+            <div class="field"><label class="label" data-i18n="settings.code_next">Next number (6 digits)</label><input class="input mono" value="000231" maxlength="6" pattern="[0-9]{6}" inputmode="numeric"><span class="hint" data-i18n="settings.code_next_hint">Increases by 1 for every new candidate; gaps are never reused.</span></div>
+            <div class="span-2 small muted"><span data-i18n="settings.code_preview">Next code will be</span> <code>SV000231</code>. <span data-i18n="settings.code_rule">Codes are always 8 characters: 2 capital letters followed by 6 digits, e.g. AZ123456.</span></div>
           </div>
         </section>
       </div>
@@ -113,7 +112,7 @@
               <div class="field"><label class="label" data-i18n="settings.brand_footer">Footer line on share pages</label><input class="input" value="Sao Việt Manpower JSC · Hà Nội · +84 24 3856 7890 · sales@saoviet.vn"></div>
               <label class="switch"><input type="checkbox" checked><span class="track"></span><span data-i18n="settings.powered">Show "Powered by Rireki"</span></label>
             </div>
-            <div class="field"><span class="label" data-i18n="common.preview">Preview</span><div class="card" style="overflow:hidden"><div class="viewer-header" style="position:static"><div class="container" style="padding-inline:14px"><div class="viewer-brand"><span class="logo">SV</span><div><div class="n">Sao Việt Manpower</div><div class="s">ヤマト建設様 溶接候補者</div></div></div></div></div><div class="card-body small muted" style="padding:14px"><div class="cand-card" style="pointer-events:none"><span class="avatar-photo">NA</span><div><div class="n">グエン・バン・アン</div><div class="k">Nguyễn Văn An · SV-2024-0182</div></div></div></div><div class="xs faint" style="padding:8px 14px;border-top:1px solid var(--border)">Sao Việt Manpower JSC · Hà Nội · Powered by Rireki</div></div></div>
+            <div class="field"><span class="label" data-i18n="common.preview">Preview</span><div class="card" style="overflow:hidden"><div class="viewer-header" style="position:static"><div class="container" style="padding-inline:14px"><div class="viewer-brand"><span class="logo">SV</span><div><div class="n">Sao Việt Manpower</div><div class="s">ヤマト建設様 溶接候補者</div></div></div></div></div><div class="card-body small muted" style="padding:14px"><div class="cand-card" style="pointer-events:none"><span class="avatar-photo">NA</span><div><div class="n">グエン・バン・アン</div><div class="k">Nguyễn Văn An · SV000182</div></div></div></div><div class="xs faint" style="padding:8px 14px;border-top:1px solid var(--border)">Sao Việt Manpower JSC · Hà Nội · Powered by Rireki</div></div></div>
           </div>
           <div class="card-footer"><button class="btn btn-primary" data-i18n="common.save">Save changes</button></div>
         </section>
@@ -169,9 +168,9 @@
           <div class="card-header"><div><h2 data-i18n="nav.audit">Audit log</h2><p class="small muted" data-i18n="settings.audit_d">Every sign-in, setting change, export, link creation and revocation. Kept for 24 months.</p></div><div class="row"><input class="input input-sm" type="date" value="2026-09-30"><button class="btn btn-sm"><svg class="ic"><use href="#i-download"/></svg>CSV</button></div></div>
           <div class="table-wrap"><table class="table"><thead><tr><th data-i18n="common.time">Time</th><th data-i18n="settings.actor">Member</th><th data-i18n="track.action">Action</th><th data-i18n="settings.target">Target</th><th>IP</th></tr></thead><tbody>
             <tr><td class="nowrap nums">10:05 <span class="faint" data-i18n="common.today">today</span></td><td>Phạm Thu Trang</td><td><span class="badge badge-info">link.create</span></td><td>さくら介護 9月候補 (3 candidates, password, view-only)</td><td class="mono">113.190.x.x</td></tr>
-            <tr><td class="nowrap nums">09:31 <span class="faint" data-i18n="common.today">today</span></td><td>Aung Myat</td><td><span class="badge badge-info">video.upload</span></td><td>SV-2024-0219 · 自己紹介.mp4</td><td class="mono">103.90.x.x</td></tr>
+            <tr><td class="nowrap nums">09:31 <span class="faint" data-i18n="common.today">today</span></td><td>Aung Myat</td><td><span class="badge badge-info">video.upload</span></td><td>SV000219 · 自己紹介.mp4</td><td class="mono">103.90.x.x</td></tr>
             <tr><td class="nowrap nums">08:58 <span class="faint" data-i18n="common.today">today</span></td><td>Nguyễn Thị Hương</td><td><span class="badge">auth.login</span></td><td>2FA ok · Chrome · Windows</td><td class="mono">113.190.x.x</td></tr>
-            <tr><td class="nowrap nums">17:50 <span class="faint" data-i18n="common.yesterday">yesterday</span></td><td>Lê Văn Tùng</td><td><span class="badge badge-info">candidate.import</span></td><td>3 files → SV-2024-0215, 2 pending review</td><td class="mono">113.190.x.x</td></tr>
+            <tr><td class="nowrap nums">17:50 <span class="faint" data-i18n="common.yesterday">yesterday</span></td><td>Lê Văn Tùng</td><td><span class="badge badge-info">candidate.import</span></td><td>3 files → SV000215, 2 pending review</td><td class="mono">113.190.x.x</td></tr>
             <tr><td class="nowrap nums">15:12 <span class="faint" data-i18n="common.yesterday">yesterday</span></td><td>Nguyễn Thị Hương</td><td><span class="badge badge-warning">member.invite</span></td><td>minh.tran@saoviet.vn (User)</td><td class="mono">113.190.x.x</td></tr>
             <tr><td class="nowrap nums">11:20 · 28 Sep</td><td>Nguyễn Thị Hương</td><td><span class="badge badge-warning">settings.security</span></td><td>View-only default: locked</td><td class="mono">113.190.x.x</td></tr>
             <tr><td class="nowrap nums">16:44 · 26 Sep</td><td>Phạm Thu Trang</td><td><span class="badge badge-info">link.create</span></td><td>ヤマト建設様 溶接候補者 (5 candidates)</td><td class="mono">113.190.x.x</td></tr>
