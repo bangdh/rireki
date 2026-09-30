@@ -26,7 +26,7 @@
     <a href="settings-company.html#audit"><svg class="ic"><use href="#i-list"/></svg><span data-i18n="nav.audit">Audit log</span></a>
   </nav>
   <div class="sidebar-foot">
-    <div class="usage"><div class="row between"><span class="strong">Pro</span><span class="faint nums">182 / 500</span></div><div class="bar"><i style="width:36%"></i></div><span class="faint" data-i18n="nav.usage">candidates used</span></div>
+    <div class="usage"><div class="row between"><span class="strong" data-i18n="nav.free_phase">Phase 1 · free</span><span class="faint nums">182</span></div><span class="faint"><span data-i18n="common.candidates_lc">candidates</span> · 12.4 GB <span data-i18n="nav.video_lc">video</span></span></div>
     <div class="me"><span class="avatar">NH</span><div><div class="name">Nguyễn Thị Hương</div><div class="role" data-i18n="role.admin">Admin</div></div></div>
   </div>
 </aside>
@@ -59,7 +59,7 @@
       <a href="settings-members.html"><svg class="ic"><use href="#i-users"/></svg><span data-i18n="nav.members">Members & roles</span></a>
       <a href="#branding" class="tab" data-tab="branding"><svg class="ic"><use href="#i-image"/></svg><span data-i18n="settings.branding">Branding</span></a>
       <a href="#security" class="tab" data-tab="security"><svg class="ic"><use href="#i-shield"/></svg><span data-i18n="settings.security">Security & defaults</span></a>
-      <a href="#billing" class="tab" data-tab="billing"><svg class="ic"><use href="#i-card"/></svg><span data-i18n="settings.billing">Plan & billing</span></a>
+      <a href="#usage" class="tab" data-tab="usage"><svg class="ic"><use href="#i-layers"/></svg><span data-i18n="settings.usage">Usage</span></a>
       <a href="#audit" class="tab" data-tab="audit"><svg class="ic"><use href="#i-list"/></svg><span data-i18n="nav.audit">Audit log</span></a>
     </nav>
     <div>
@@ -149,24 +149,17 @@
         </section>
       </div>
 
-      <!-- BILLING -->
-      <div data-tab-panel="billing" class="stack-lg" hidden>
+      <!-- USAGE -->
+      <div data-tab-panel="usage" class="stack-lg" hidden>
+        <div class="callout callout-success"><svg class="ic"><use href="#i-check-circle"/></svg><div><b data-i18n="settings.free_t">Rireki is free during phase 1</b><br><span data-i18n="settings.free_d">No plan to choose and no invoice. Every feature is available to every workspace.</span></div></div>
         <section class="card">
-          <div class="card-header"><div><h2><span data-i18n="settings.plan">Plan</span>: Pro</h2><p class="small muted">US$ 79 / <span data-i18n="settings.month">month</span> · <span data-i18n="settings.renews">renews</span> 1 Nov 2026 · VISA •••• 4242</p></div><div class="row"><button class="btn" data-i18n="settings.change_plan">Change plan</button><button class="btn btn-primary" data-i18n="settings.upgrade">Upgrade to Business</button></div></div>
+          <div class="card-header"><h2 data-i18n="settings.usage">Usage</h2><span class="small muted" data-i18n="settings.usage_d">What this workspace uses today</span></div>
           <div class="card-body grid grid-4">
-            <div><div class="row between small"><span data-i18n="cand.title">Candidates</span><span class="nums">182 / 500</span></div><div class="progress mt-8"><i style="width:36%"></i></div></div>
-            <div><div class="row between small"><span data-i18n="settings.video_storage">Video storage</span><span class="nums">12.4 / 50 GB</span></div><div class="progress mt-8"><i style="width:25%"></i></div></div>
-            <div><div class="row between small"><span data-i18n="nav.members">Members</span><span class="nums">8 / 15</span></div><div class="progress mt-8"><i style="width:53%"></i></div></div>
-            <div><div class="row between small"><span data-i18n="shares.title">Share links</span><span class="nums">14 / ∞</span></div><div class="progress mt-8"><i style="width:8%"></i></div></div>
+            <div class="kpi"><span class="label" data-i18n="cand.title">Candidates</span><span class="value">182</span><span class="delta"><span>141 <span data-i18n="cand.with_video">with video</span></span></span></div>
+            <div class="kpi"><span class="label" data-i18n="settings.video_storage">Video storage</span><span class="value">12.4 GB</span><span class="delta"><span>263 <span data-i18n="viewer.videos">videos</span></span></span></div>
+            <div class="kpi"><span class="label" data-i18n="nav.members">Members</span><span class="value">8</span><span class="delta"><span>2 <span data-i18n="role.admins">admins</span> · 5 <span data-i18n="role.users">users</span> · 1 <span data-i18n="common.invited_lc">invited</span></span></span></div>
+            <div class="kpi"><span class="label" data-i18n="dash.kpi_links">Active share links</span><span class="value">14</span><span class="delta"><span>226 <span data-i18n="shares.views_30d">views in the last 30 days</span></span></span></div>
           </div>
-        </section>
-        <section class="card">
-          <div class="card-header"><h3 data-i18n="settings.invoices">Invoices</h3></div>
-          <div class="table-wrap"><table class="table"><thead><tr><th data-i18n="common.date">Date</th><th data-i18n="settings.invoice_no">Invoice</th><th class="num" data-i18n="settings.amount">Amount</th><th data-i18n="common.status">Status</th><th></th></tr></thead><tbody>
-            <tr><td>1 Sep 2026</td><td class="mono">INV-2026-09-0412</td><td class="num">US$ 79.00</td><td><span class="badge badge-success" data-i18n="settings.paid">Paid</span></td><td class="right"><button class="btn btn-sm btn-ghost">PDF</button></td></tr>
-            <tr><td>1 Aug 2026</td><td class="mono">INV-2026-08-0398</td><td class="num">US$ 79.00</td><td><span class="badge badge-success" data-i18n="settings.paid">Paid</span></td><td class="right"><button class="btn btn-sm btn-ghost">PDF</button></td></tr>
-            <tr><td>1 Jul 2026</td><td class="mono">INV-2026-07-0371</td><td class="num">US$ 79.00</td><td><span class="badge badge-success" data-i18n="settings.paid">Paid</span></td><td class="right"><button class="btn btn-sm btn-ghost">PDF</button></td></tr>
-          </tbody></table></div>
         </section>
       </div>
 

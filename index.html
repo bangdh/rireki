@@ -123,7 +123,7 @@
             <li><div class="node"><a href="app/settings-members.html">Thành viên & vai trò (mời, admin/user, tạm khóa)</a><span class="path">/settings/members</span></div></li>
             <li><div class="node"><a href="app/settings-company.html#branding">Thương hiệu trang khách hàng</a><span class="path">/settings/branding</span></div></li>
             <li><div class="node"><a href="app/settings-company.html#security">Bảo mật & mặc định link (2FA, khóa chỉ-xem…)</a><span class="path">/settings/security</span></div></li>
-            <li><div class="node"><a href="app/settings-company.html#billing">Gói & thanh toán</a><span class="path">/settings/billing</span></div></li>
+            <li><div class="node"><a href="app/settings-company.html#usage">Dung lượng sử dụng (giai đoạn 1 miễn phí, không có gói)</a><span class="path">/settings/usage</span></div></li>
             <li><div class="node"><a href="app/settings-company.html#audit">Nhật ký hệ thống</a><span class="path">/settings/audit</span></div></li>
           </ul></li>
         <li><div class="node">Hồ sơ cá nhân (ngôn ngữ, mật khẩu, 2FA) · Thông báo<span class="path">/profile · /notifications</span><span class="todo">chưa vẽ</span></div></li>
@@ -147,7 +147,7 @@
         <tr><td>Tải PDF / video / tài liệu</td><td class="y">✓</td><td class="y">✓</td><td class="p">chỉ khi link “cho tải”</td></tr>
         <tr><td>Đánh dấu “Quan tâm”, gửi bình luận cho bên gửi</td><td class="n">—</td><td class="n">—</td><td class="y">✓ nếu link bật</td></tr>
         <tr><td>Mời / tạm khóa / xóa thành viên, đổi vai trò</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
-        <tr><td>Cài đặt công ty, thương hiệu, mặc định bảo mật, gói</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
+        <tr><td>Cài đặt công ty, thương hiệu, mặc định bảo mật</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
         <tr><td>Xuất Excel/PDF hàng loạt, nhật ký hệ thống</td><td class="y">✓</td><td class="n">—</td><td class="n">—</td></tr>
       </tbody></table></div></div>
     <p class="small muted mt-12">Ràng buộc: không thể hạ cấp/xóa admin cuối cùng; admin bắt buộc 2FA (bật mặc định); mọi hành động nhạy cảm ghi vào nhật ký hệ thống.</p>
@@ -188,7 +188,7 @@
     <h2>Mô hình dữ liệu <span class="jp">データモデル</span></h2>
     <p class="lead">Mọi bảng đều gắn <code>tenant_id</code> (multi-tenant theo subdomain). Video và tài liệu lưu object storage tại vùng Tokyo, phát qua URL ký ngắn hạn.</p>
     <div class="entities">
-      <div class="entity"><div class="h">Tenant</div><ul><li><b>id</b>, subdomain (unique)</li><li>name_local / name_ja / name_en</li><li>country, license_no, timezone</li><li>default_lang, brand (logo, color, footer)</li><li>code_prefix, code_year, code_digits</li><li>link_defaults (password, view_only, identity, expiry, locks)</li><li>plan, limits (candidates, storage, seats)</li></ul></div>
+      <div class="entity"><div class="h">Tenant</div><ul><li><b>id</b>, subdomain (unique)</li><li>name_local / name_ja / name_en</li><li>country, license_no, timezone</li><li>default_lang, brand (logo, color, footer)</li><li>code_prefix, code_year, code_digits</li><li>link_defaults (password, view_only, identity, expiry, locks)</li><li>usage (candidates, storage, seats) — giai đoạn 1 miễn phí, chưa có plan</li></ul></div>
       <div class="entity"><div class="h">User</div><ul><li><b>id</b>, tenant_id, email</li><li>name, role: admin | user</li><li>branch, lang, status: active | invited | suspended</li><li>twofa_enabled, last_active_at</li></ul></div>
       <div class="entity"><div class="h">Candidate 人材</div><ul><li><b>id</b>, tenant_id, <b>code</b> (SV-2024-0182)</li><li>name_native, name_kana, name_latin</li><li>dob, gender, nationality, marital, religion</li><li>photo, status: draft | available | proposed | interviewing | selected | departed | archived</li><li>desired_jobs[], desired_areas[], available_from, program</li><li>tags[], created_by, updated_by</li></ul></div>
       <div class="entity"><div class="h">CV (履歴書 sections)</div><ul><li>candidate_id (1:1)</li><li>contact (address, phone, email, messenger, emergency)</li><li>family[] (relation, name, age, job, living_together)</li><li>education[], work[] (from, to, org, detail, status)</li><li>qualifications[], jlpt, study_months, conversation</li><li>health (height, weight, vision, blood, hand, tattoo, allergies)</li><li>motivation, self_pr, hobbies (+ bản dịch JA / gốc)</li><li>completeness %, source_file_id</li></ul></div>
@@ -306,7 +306,7 @@
     <h2>19 màn hình mockup <span class="jp">画面一覧</span></h2>
     <h3>Public (2)</h3>
     <div class="screen-list">
-      <a class="screen" href="public/landing.html"><span class="path">public/landing.html</span><span class="t">Landing page</span><span class="d">Giá trị cốt lõi, 6 tính năng, cách hoạt động, bảo mật, 5 ngôn ngữ, bảng giá 3 gói.</span></a>
+      <a class="screen" href="public/landing.html"><span class="path">public/landing.html</span><span class="t">Landing page</span><span class="d">Giá trị cốt lõi, 6 tính năng, cách hoạt động, bảo mật, 5 ngôn ngữ. Giai đoạn 1 miễn phí nên không có bảng giá.</span></a>
       <a class="screen" href="public/signup.html"><span class="path">public/signup.html</span><span class="t">Đăng ký tenant</span><span class="d">Tên công ty, quốc gia, subdomain tự gợi ý từ tên (xem trước <code>xxx.rireki.app</code>), admin đầu tiên, ngôn ngữ.</span></a>
     </div>
     <h3>Tenant app (12)</h3>
@@ -322,7 +322,7 @@
       <a class="screen" href="app/share-new.html"><span class="path">app/share-new.html</span><span class="t">Tạo link — 3 bước</span><span class="d">Chọn nhân sự → truy cập & bảo vệ (mật khẩu, định danh, chỉ xem/cho tải, hạn, mục hiển thị) → gửi (copy, QR, email mẫu).</span></a>
       <a class="screen" href="app/share-detail.html"><span class="path">app/share-detail.html</span><span class="t">Chi tiết link & tracking</span><span class="d">KPI, biểu đồ theo ngày, nhật ký người xem, lượt xem theo nhân sự, cài đặt, thu hồi.</span></a>
       <a class="screen" href="app/settings-members.html"><span class="path">app/settings-members.html</span><span class="t">Thành viên & vai trò</span><span class="d">Bảng thành viên (admin/user, chi nhánh, 2FA, trạng thái), modal mời, ma trận quyền.</span></a>
-      <a class="screen" href="app/settings-company.html"><span class="path">app/settings-company.html</span><span class="t">Cài đặt công ty</span><span class="d">Tab: hồ sơ & subdomain & mã nhân sự · thương hiệu (xem trước) · bảo mật & mặc định link (khóa chỉ-xem) · gói & hóa đơn · nhật ký.</span></a>
+      <a class="screen" href="app/settings-company.html"><span class="path">app/settings-company.html</span><span class="t">Cài đặt công ty</span><span class="d">Tab: hồ sơ & subdomain & mã nhân sự · thương hiệu (xem trước) · bảo mật & mặc định link (khóa chỉ-xem) · dung lượng sử dụng · nhật ký.</span></a>
     </div>
     <h3>Client viewer (4)</h3>
     <div class="screen-list">
@@ -340,10 +340,10 @@
     <h2>Phạm vi & roadmap</h2>
     <div class="two">
       <div class="card"><div class="card-header"><h3>MVP (đã thiết kế)</h3></div><div class="card-body"><ul class="note-list">
-        <li>Tenant/subdomain, admin & user, 2FA, nhật ký.</li><li>Nhập CV từ DOCX/PDF có kiểm tra; form 7 bước; mã nhân sự; tên gốc + katakana; 1 CV, nhiều video, tài liệu.</li><li>Link gửi CV: nhiều hoặc 1 nhân sự, mật khẩu on/off, định danh người xem, chỉ xem/cho tải, hạn, giới hạn lượt, mục hiển thị.</li><li>Chế độ chỉ xem có watermark, chặn tải/in/sao chép, làm mờ khi mất focus.</li><li>Tracking theo link/người/nhân sự/ngày, phản hồi “Quan tâm”.</li><li>5 ngôn ngữ giao diện.</li>
+        <li>Tenant/subdomain, admin & user, 2FA, nhật ký. Toàn bộ miễn phí trong giai đoạn 1, không có gói/thanh toán.</li><li>Nhập CV từ DOCX/PDF có kiểm tra; form 7 bước; mã nhân sự; tên gốc + katakana; 1 CV, nhiều video, tài liệu.</li><li>Link gửi CV: nhiều hoặc 1 nhân sự, mật khẩu on/off, định danh người xem, chỉ xem/cho tải, hạn, giới hạn lượt, mục hiển thị.</li><li>Chế độ chỉ xem có watermark, chặn tải/in/sao chép, làm mờ khi mất focus.</li><li>Tracking theo link/người/nhân sự/ngày, phản hồi “Quan tâm”.</li><li>5 ngôn ngữ giao diện.</li>
       </ul></div></div>
       <div class="card"><div class="card-header"><h3>Phase 2 (có trong sitemap, chưa vẽ)</h3></div><div class="card-body"><ul class="note-list">
-        <li>Nhập hàng loạt ZIP/Excel; danh bạ khách hàng; mẫu email theo khách.</li><li>Vai trò tùy chỉnh theo chi nhánh; SSO.</li><li>App di động cho khách (chặn chụp màn hình Android, phát hiện iOS) và DRM video.</li><li>API/Webhook cho hệ thống quản lý phái cử hiện có; ký số PDF 履歴書.</li><li>Khu vận hành admin.rireki.app.</li>
+        <li>Nhập hàng loạt ZIP/Excel; danh bạ khách hàng; mẫu email theo khách.</li><li>Vai trò tùy chỉnh theo chi nhánh; SSO.</li><li>App di động cho khách (chặn chụp màn hình Android, phát hiện iOS) và DRM video.</li><li>API/Webhook cho hệ thống quản lý phái cử hiện có; ký số PDF 履歴書.</li><li>Gói trả phí & thanh toán (khi kết thúc giai đoạn miễn phí).</li><li>Khu vận hành admin.rireki.app.</li>
       </ul></div></div>
     </div>
   </section>
