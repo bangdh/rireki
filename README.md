@@ -7,6 +7,8 @@ password-protected, view-only links to clients in Japan with view tracking.
 
 **Live demo:** https://bangdh.github.io/rireki/ (GitHub Pages, redeployed by `.github/workflows/pages.yml` on every push to `main`).
 
+**Tech stack & Docker deployment:** [`docs/tech-stack.md`](docs/tech-stack.md) · [`deploy/`](deploy/) (Docker Compose with Caddy, PostgreSQL, Redis, MinIO, worker).
+
 ## Open the mockups
 
 No build step. Open `index.html` in a browser, or serve the folder:

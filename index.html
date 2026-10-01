@@ -43,7 +43,7 @@
       <h1 class="mt-12">Rireki — Sitemap & thiết kế màn hình</h1>
       <p class="lead">Mỗi công ty phái cử có một subdomain riêng, nhiều admin và user. Nhân sự được nhập từ DOCX/PDF hoặc form nhiều bước, mỗi người có 1 CV, nhiều video và một mã nhân sự. Công ty chọn CV từ kho, tạo link (có/không mật khẩu, chỉ xem hoặc cho tải) gửi khách hàng Nhật và theo dõi ai đã xem.</p>
       <div class="toc">
-        <a href="#zones">Tổng quan</a><a href="#sitemap">Sitemap</a><a href="#roles">Vai trò</a><a href="#flows">Luồng chính</a><a href="#data">Dữ liệu</a><a href="#protect">Bảo vệ nội dung</a><a href="#tracking">Tracking</a><a href="#i18n">Đa ngôn ngữ</a><a href="#design">Design system</a><a href="#screens">19 màn hình</a><a href="#roadmap">Phạm vi & roadmap</a>
+        <a href="#zones">Tổng quan</a><a href="#sitemap">Sitemap</a><a href="#roles">Vai trò</a><a href="#flows">Luồng chính</a><a href="#data">Dữ liệu</a><a href="#protect">Bảo vệ nội dung</a><a href="#tracking">Tracking</a><a href="#i18n">Đa ngôn ngữ</a><a href="#design">Design system</a><a href="#screens">19 màn hình</a><a href="#stack">Tech stack & deploy</a><a href="#roadmap">Phạm vi & roadmap</a>
       </div>
     </div>
     <div class="card doc-hero-card"><div class="card-body stack" style="gap:8px">
@@ -333,6 +333,36 @@
     </div>
     <h3>Tệp dùng chung</h3>
     <ul class="note-list"><li><code>assets/style.css</code> — token màu/typography, app shell, toàn bộ component.</li><li><code>assets/i18n.js</code> — 635 chuỗi × 5 ngôn ngữ.</li><li><code>assets/app.js</code> — icon sprite, đổi ngôn ngữ/theme, tab, stepper, copy, modal, biểu đồ, watermark, chống tải/chụp cho trang khách.</li></ul>
+  </section>
+
+  <!-- TECH STACK -->
+  <section class="doc-section" id="stack">
+    <h2>Tech stack & triển khai <span class="jp">Docker Compose · MinIO</span></h2>
+    <p class="lead">Toàn bộ TypeScript (Next.js · NestJS · BullMQ), PostgreSQL, Redis, MinIO (S3 API, sau này đổi sang AWS S3 chỉ bằng biến môi trường), Caddy cấp TLS tự động cho từng subdomain tenant, Claude API trích xuất 履歴書. Đóng gói bằng một file <code>deploy/docker-compose.yml</code>. Chi tiết và lý do chọn: <a href="https://github.com/bangdh/rireki/blob/main/docs/tech-stack.md">docs/tech-stack.md</a> · cách chạy: <a href="https://github.com/bangdh/rireki/tree/main/deploy">deploy/README.md</a>.</p>
+    <div class="flow">
+      <div class="box"><span class="who">Edge</span><b>Caddy 2</b>TLS on-demand cho *.rireki.app · reverse proxy · phục vụ mockup tĩnh</div><span class="arrow">→</span>
+      <div class="box"><span class="who">App</span><b>web · Next.js</b>Tenant app + trang khách, i18n 5 ngôn ngữ, hls.js</div><span class="arrow">→</span>
+      <div class="box"><span class="who">App</span><b>api · NestJS + Prisma</b>Auth, tenant, nhân sự, link gửi, tracking, presigned URL</div><span class="arrow">→</span>
+      <div class="box alt"><span class="who">Data</span><b>PostgreSQL 16 · Redis 7 · MinIO</b>tenant_id trên mọi bảng · session/queue · 5 bucket private</div><span class="arrow">→</span>
+      <div class="box"><span class="who">Jobs</span><b>worker · BullMQ</b>ffmpeg → HLS + watermark, DOCX→PDF→ảnh trang, Claude API (claude-opus-5-5) đọc CV → JSON 履歴書, email</div>
+    </div>
+    <div class="two mt-16">
+      <div class="card"><div class="card-header"><h3>Bucket MinIO</h3></div><div class="table-wrap"><table class="table">
+        <thead><tr><th>Bucket</th><th>Nội dung</th><th>Quyền · lifecycle</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">rireki-originals</td><td>CV/ảnh/video gốc, hộ chiếu, chứng chỉ</td><td>private, versioning</td></tr>
+          <tr><td class="mono">rireki-media</td><td>HLS, poster</td><td>private</td></tr>
+          <tr><td class="mono">rireki-renders</td><td>ảnh từng trang 履歴書</td><td>private, xoá sau 90 ngày</td></tr>
+          <tr><td class="mono">rireki-uploads</td><td>upload đang dở</td><td>private, xoá sau 1 ngày</td></tr>
+          <tr><td class="mono">rireki-public</td><td>logo tenant</td><td>public-read</td></tr>
+        </tbody></table></div></div>
+      <div class="card"><div class="card-header"><h3>Compose profiles</h3></div><div class="card-body"><ul class="note-list">
+        <li><code>docker compose up -d</code> — Caddy, Postgres, Redis, MinIO + job tạo bucket; chạy được ngay, phục vụ mockup tại <code>design.&lt;domain&gt;</code>.</li>
+        <li><code>--profile app</code> — thêm web / api / worker (build từ <code>apps/</code> khi có mã nguồn).</li>
+        <li><code>--profile dev</code> — Mailpit (SMTP giả). <code>--profile prod</code> — backup Postgres hằng đêm, giữ 14 ngày.</li>
+        <li>Máy chủ khởi điểm: 1 VPS Tokyo 4 vCPU · 8 GB · 160 GB SSD; khi lớn: chuyển MinIO → S3, Postgres → managed, thêm worker.</li>
+      </ul></div></div>
+    </div>
   </section>
 
   <!-- ROADMAP -->
