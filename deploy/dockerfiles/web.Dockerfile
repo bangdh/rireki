@@ -3,6 +3,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 COPY . .
+RUN mkdir -p apps/web/public                # may be absent from the context (git keeps no empty dirs)
 RUN pnpm install --frozen-lockfile          # root postinstall generates the Prisma client
 ENV NEXT_TELEMETRY_DISABLED=1
 # Placeholder env: `next build` imports route modules (lib/env.ts validates env at import) while collecting page
