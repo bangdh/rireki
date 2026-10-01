@@ -21,6 +21,23 @@ Seed (`packages/db/seed.ts`): tenant `saoviet` (Sao Việt Manpower, prefix SV),
 `app/candidates.html` with CV bodies from the mockup, 3 share links from `app/shares.html` with a few view events.
 Idempotent (upsert by code/email/token).
 
+## Cloud container (no Docker)
+
+When the repo is built inside the Claude Code cloud container (the `build-rireki` workflow) there is no Docker
+daemon. Do not run `docker compose`; these services are already running on localhost and are shared by all agents:
+
+| Service | Use |
+|---|---|
+| PostgreSQL 16 | `DATABASE_URL=postgresql://rireki:rireki@localhost:5432/rireki` (superuser; Prisma may create its shadow DB) |
+| Redis 7 | `REDIS_URL=redis://localhost:6379` |
+| S3 (moto server, S3-compatible, no auth check) | `S3_ENDPOINT=http://127.0.0.1:9000`, `S3_PUBLIC_ENDPOINT=http://127.0.0.1:9000`, `S3_ACCESS_KEY=minioadmin`, `S3_SECRET_KEY=minioadmin`, `S3_REGION=us-east-1`, `forcePathStyle: true`. Buckets `rireki-originals rireki-media rireki-renders rireki-uploads rireki-public` exist. If it is down: `/opt/moto/bin/moto_server -p 9000 -H 127.0.0.1 &` and recreate the buckets with boto3 from `/opt/moto/bin/python` |
+| Mail | no SMTP: with `SMTP_URL` empty, nodemailer must use `jsonTransport` and log the message |
+| Binaries | `ffmpeg` 6.1, `tesseract` 5 (`ben eng ind jpn mya vie`), `pdftoppm` (poppler) are on PATH |
+| Browsers | Playwright **1.56.1** browsers in `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH` is set): pin `@playwright/test@1.56.1`, never run `playwright install` |
+| Unreachable | `huggingface.co` (no Docling/transformer models), GitHub release downloads (no YuNet ONNX, MinIO or Mailpit binaries); `ANTHROPIC_API_KEY` is not set, so Claude calls are mocked in tests |
+| Ports | web 3000 (`http://saoviet.localhost:3000`), extractor 8000; a feature agent that needs its own dev server uses 3001–3010 and stops it afterwards |
+| Git | the orchestrator commits after each phase; agents never commit, stash, checkout, reset or clean |
+
 ## Checks
 
 ```bash

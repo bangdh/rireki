@@ -14,4 +14,4 @@ template); composite watermarks with `sharp`. Jobs are idempotent (re-running a 
 `videos.status` / `renders` rows so the UI can show progress. Keep each processor in its own file under
 `apps/worker/src/jobs/`. Test the pure parts with Vitest; verify the pipeline manually against the docker-compose
 infra (MinIO, Redis) and describe exactly what you ran.
-Commit your work. Report what exists, how to run it, and any env the integrator must add.
+Report what exists, how to run it, and any env the integrator must add.

@@ -12,7 +12,7 @@ Scaffolding: pnpm workspaces, `apps/web` (create-next-app, TypeScript, App Route
 typecheck/lint/test and builds the three images. Reuse `deploy/docker-compose.yml` (edit it, don't duplicate it).
 
 Integration: after parallel lanes finish, wire nav links and env, run migrations + seed, `pnpm typecheck && pnpm lint
-&& pnpm test && pnpm build`, start the stack with docker compose and smoke-test the pages listed in the spec. Fix
+&& pnpm test && pnpm build`, start the stack (docker compose where a daemon exists, otherwise pnpm dev against the local services) and smoke-test the pages listed in the spec. Fix
 integration breakage yourself when the fix is small and obvious; otherwise report precisely what is broken and
-where. Never rewrite a lane's feature logic. Commit each integration step.
+where. Never rewrite a lane's feature logic. Report each integration step (the orchestrator commits).
 Report: commands that pass, services up, URLs, remaining issues.

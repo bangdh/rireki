@@ -13,4 +13,4 @@ Keep it one FastAPI file plus small modules (`convert.py`, `ocr.py`, `photo.py`,
 synthetic documents you generate in the test (a DOCX with a table and an embedded PNG; a PDF rendered from HTML).
 The template matcher returns `template_match: true` plus the mapped fields when the Japanese labels of the company
 履歴書 template are found. Measure and print timing per page. Verify with `pytest` and by running the service in
-docker. Commit your work and report the contract, timings and limits (what still needs the LLM).
+docker. Report the contract, timings and limits (what still needs the LLM).

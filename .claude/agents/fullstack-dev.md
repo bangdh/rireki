@@ -20,7 +20,7 @@ Working method:
    function you wrote. Run `pnpm build` if you touched routing or config.
 6. Stay inside your lane's paths (CLAUDE.md "Path ownership"). If you need something outside, create it under your
    lane's `lib/` and note it in your report.
-7. Commit your work with a clear message.
+7. Leave your work uncommitted in the working tree; the orchestrator commits.
 
 Return a short report: what was built (routes, files), how it was verified, open issues, and anything the
 integrator must wire (nav links, env vars, migrations).

@@ -75,7 +75,7 @@ pnpm --filter @rireki/web e2e # Playwright
 4. Works on a 400px-wide screen (the CSS already handles it; don't add fixed widths).
 5. `pnpm typecheck`, `pnpm lint`, `pnpm test` pass; new logic has a Vitest test when it is pure; e2e updated when a flow changes.
 6. No secrets in code; config via env (see `deploy/.env.example`).
-7. Commit with a clear message on the current branch. Do not force-push.
+7. Commit with a clear message on the current branch (inside the build-rireki workflow the orchestrator commits for you: never commit, stash, checkout, reset or clean there). Do not force-push.
 
 ## Path ownership when agents work in parallel
 
