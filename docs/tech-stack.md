@@ -7,9 +7,10 @@
 
 | Lớp | Lựa chọn | Vì sao |
 |---|---|---|
-| Frontend (tenant app + trang khách) | **Next.js 15 (React, TypeScript)**, Tailwind CSS, `next-intl` (5 ngôn ngữ), `hls.js` | SSR đọc được subdomain từ `Host` để resolve tenant; middleware chặn/định tuyến; i18n có sẵn; chuyển trực tiếp token màu/thành phần từ bộ mockup |
-| Backend API | **NestJS (TypeScript)** + **Prisma** | Cấu trúc module rõ (tenant, auth, candidates, shares, tracking), chung ngôn ngữ và kiểu dữ liệu với frontend, một đội nhỏ bảo trì được |
-| Worker nền | **BullMQ** (Node) + `ffmpeg`, LibreOffice headless, `poppler`, `sharp` | Chuyển mã video → HLS, DOCX→PDF→ảnh trang, ghép watermark, gửi email, dọn file tạm |
+| Web + API (một app) | **Next.js 15 full-stack (React, TypeScript)**: UI + Route Handlers + Server Actions, `next-intl` (5 ngôn ngữ), `hls.js`, CSS lấy nguyên từ mockup | Một app thay vì web + API riêng: ít code nhất; SSR đọc subdomain từ `Host` để resolve tenant; không Tailwind/UI kit vì mockup đã có CSS |
+| Auth | **better-auth** (email + mật khẩu, plugin `organization` = tenant, vai trò admin/user) | Không tự viết session/auth; không 2FA ở giai đoạn 1 |
+| ORM | **Prisma** (`packages/db`), thân CV là một cột `Json` kiểm tra bằng zod | Ít bảng, ít migration; schema 履歴書 chỉ định nghĩa một lần bằng zod |
+| Worker nền | **BullMQ** (Node) + `ffmpeg`, **Playwright/Chromium**, `sharp` | Video → HLS, chụp trang 履歴書 từ chính route in của web (không cần LibreOffice cho mẫu của mình), ghép watermark, gửi email |
 | Trích xuất CV | **extractor** (Python: Docling, Tesseract, OpenCV) + **Claude API** (`claude-opus-5-5`, structured outputs) | Text, bảng và ảnh thẻ được tách ở local (mục 5); CV theo mẫu công ty ánh xạ bằng luật không cần LLM; Claude chỉ nhận Markdown ~1–2K token cho CV lạ hoặc text tự do |
 | CSDL | **PostgreSQL 16** | Multi-tenant bằng `tenant_id` trên mọi bảng (+ Row Level Security khi cần), full-text `pg_trgm` cho tìm theo tên/katakana/mã |
 | Cache & hàng đợi | **Redis 7** | Session, rate-limit cổng mật khẩu, hàng đợi BullMQ, đếm lượt xem gần thời gian thực |
@@ -19,7 +20,7 @@
 | Giám sát | `pino` log JSON → Grafana Loki (tùy chọn), **Sentry**, healthcheck Docker | Đủ cho 1 VPS; thêm Prometheus khi tải tăng |
 | CI/CD | GitHub Actions build image → GHCR → SSH `docker compose pull && up -d` | Khớp với repo hiện tại; Pages đã dùng Actions |
 
-Ngôn ngữ duy nhất **TypeScript** ở web/api/worker: chia sẻ kiểu `Candidate`, `ShareLink`, schema zod/JSON của 履歴書 và 611 chuỗi i18n giữa các app.
+Ngôn ngữ duy nhất **TypeScript** ở web/worker (Python chỉ cho extractor): chia sẻ kiểu `Candidate`, `ShareLink`, schema zod của 履歴書 và 611 chuỗi i18n qua `packages/shared`.
 
 ## 2. Kiến trúc tổng thể
 
@@ -31,9 +32,8 @@ flowchart LR
   end
   subgraph VPS["VPS Tokyo · Docker Compose"]
     Caddy[Caddy 2<br/>TLS on-demand · *.rireki.app]
-    Web[web · Next.js]
-    API[api · NestJS]
-    Worker[worker · BullMQ<br/>ffmpeg · LibreOffice · sharp]
+    Web[web · Next.js<br/>UI + Route Handlers + Server Actions]
+    Worker[worker · BullMQ<br/>ffmpeg · Playwright · sharp]
     Extractor[extractor · Python<br/>Docling · Tesseract · OpenCV]
     PG[(PostgreSQL 16)]
     Redis[(Redis 7)]
@@ -44,13 +44,11 @@ flowchart LR
   Staff --> Caddy
   Client --> Caddy
   Caddy --> Web
-  Caddy -->|/api, /s/*/stream| API
   Caddy -->|s3.rireki.app presigned| MinIO
-  Web --> API
-  API --> PG
-  API --> Redis
-  API --> MinIO
-  API -->|job| Redis
+  Web --> PG
+  Web --> Redis
+  Web --> MinIO
+  Web -->|job| Redis
   Redis -->|job| Worker
   Worker --> MinIO
   Worker --> PG
@@ -63,8 +61,8 @@ flowchart LR
 ## 3. Multi-tenant theo subdomain
 
 - DNS: `A rireki.app`, `A *.rireki.app` (wildcard) và `A s3.rireki.app` trỏ về VPS.
-- Caddy cấp chứng chỉ **on-demand**: lần đầu có request tới `saoviet.rireki.app`, Caddy hỏi `GET http://api:3000/internal/tls/ask?domain=…`; API trả 200 nếu subdomain tồn tại trong bảng `tenants`, Caddy mới xin cert. Không cần plugin DNS, không cần wildcard cert. (Nếu muốn wildcard: build Caddy với module `caddy-dns/cloudflare`, xem `deploy/dockerfiles/caddy.Dockerfile`.)
-- Next.js middleware đọc `Host` → `tenantSlug`, ghi vào header nội bộ; API nhận `X-Tenant` + session để scope mọi truy vấn theo `tenant_id`.
+- Caddy cấp chứng chỉ **on-demand**: lần đầu có request tới `saoviet.rireki.app`, Caddy hỏi `GET http://web:3000/api/internal/tls/ask?domain=…`; web trả 200 nếu subdomain tồn tại trong bảng `tenants`, Caddy mới xin cert. Không cần plugin DNS, không cần wildcard cert. (Nếu muốn wildcard: build Caddy với module `caddy-dns/cloudflare`, xem `deploy/dockerfiles/caddy.Dockerfile`.)
+- Next.js middleware đọc `Host` → `tenantSlug`, ghi header `x-tenant`; Route Handlers/Server Actions đọc header + session better-auth và scope mọi truy vấn theo `tenant_id`.
 - Cookie phiên đặt theo từng subdomain (không dùng `Domain=.rireki.app`) để đăng nhập tenant A không hiện ở tenant B. Trang khách `/s/{token}` dùng cookie riêng, hạn ngắn.
 - Mã nhân sự `AZ123456`: unique trên `(tenant_id, code)`; prefix 2 chữ in hoa + bộ đếm 6 chữ số trong bảng `tenants`, cấp trong transaction.
 
@@ -145,7 +143,7 @@ Service `extractor` (Python 3.12, FastAPI) trong Compose, profile `app`: `POST /
 
 ## 6. Bảo mật & bảo vệ nội dung
 
-- Đăng nhập email + mật khẩu (argon2id), session trong Redis, cookie `HttpOnly; Secure; SameSite=Lax`, khóa 15 phút sau 5 lần sai.
+- Đăng nhập email + mật khẩu qua better-auth (session trong Postgres), cookie `HttpOnly; Secure; SameSite=Lax` theo từng subdomain, khóa 15 phút sau 5 lần sai.
 - Cổng link khách: token 22 ký tự ngẫu nhiên trong URL; mật khẩu (argon2id); rate-limit theo IP+token bằng Redis; ghi `failed_password`.
 - Mọi URL file là presigned ngắn hạn, gắn `tenant_id` và phiên; không có URL cố định tới file riêng tư.
 - Chế độ chỉ xem: ảnh trang có watermark server-side + lớp phủ client, chặn in/chuột phải/phím tắt, làm mờ khi mất focus (đã mô phỏng trong mockup). Browser không chặn được screenshot của hệ điều hành — nêu rõ trong UI.
@@ -162,16 +160,15 @@ Toàn bộ chạy bằng một file `deploy/docker-compose.yml` (chi tiết tron
 | `redis` | `redis:7-alpine` | cache/queue | mặc định |
 | `minio` | `minio/minio` | object storage (console cổng 9001, chỉ bind localhost) | mặc định |
 | `minio-init` | `minio/mc` | tạo bucket, policy, lifecycle, user ứng dụng | mặc định (chạy một lần) |
-| `web` | build `apps/web` | Next.js | `app` |
-| `api` | build `apps/api` | NestJS | `app` |
-| `worker` | build `apps/worker` | BullMQ + ffmpeg/LibreOffice/poppler, font Noto JP/Myanmar/Bengali | `app` |
+| `web` | build `apps/web` | Next.js: UI + API routes + Server Actions (cũng trả lời `tls/ask` cho Caddy) | `app` |
+| `worker` | build `apps/worker` | BullMQ + ffmpeg + Playwright/Chromium + sharp, font Noto JP/Myanmar/Bengali | `app` |
 | `extractor` | build `apps/extractor` | Python: Docling, Tesseract (jpn/vie/mya/ben/ind/eng), OpenCV, FastAPI `POST /extract` | `app` |
 | `mailpit` | `axllent/mailpit` | hộp thư giả khi dev | `dev` |
 | `pgbackup` | `prodrigestivill/postgres-backup-local` | dump hằng đêm | `prod` |
 
 - `docker compose up -d` → hạ tầng + Caddy phục vụ bộ mockup (chạy được ngay hôm nay).
-- `docker compose --profile app up -d --build` → thêm web/api/worker khi mã nguồn ứng dụng có trong `apps/`.
-- Image ứng dụng build multi-stage trên `node:22-alpine` (web/api) và `node:22-bookworm-slim` (worker, vì cần ffmpeg + LibreOffice); chạy bằng user không phải root; có `HEALTHCHECK`.
+- `docker compose --profile app up -d --build` → thêm web/worker/extractor khi mã nguồn ứng dụng có trong `apps/`.
+- Image ứng dụng build multi-stage trên `node:22-alpine` (web) và `node:22-bookworm-slim` (worker: ffmpeg + Chromium của Playwright); extractor trên `python:3.12-slim`; chạy bằng user không phải root; có `HEALTHCHECK`.
 - Cấu hình qua một file `.env` (mẫu `deploy/.env.example`); không có secret nào trong image.
 
 ## 8. Máy chủ & vận hành
@@ -185,21 +182,38 @@ Toàn bộ chạy bằng một file `deploy/docker-compose.yml` (chi tiết tron
 ```
 rireki/
 ├─ apps/
-│  ├─ web/        # Next.js (tenant app + trang khách)
-│  ├─ api/        # NestJS + Prisma (schema trong apps/api/prisma)
-│  └─ worker/     # BullMQ processors: media, render, extract, mail
+│  ├─ web/        # Next.js: UI + API routes + Server Actions (tenant app, trang khách, print route)
+│  ├─ worker/     # BullMQ processors: media, render, extract (gọi extractor + Claude), mail
+│  └─ extractor/  # Python FastAPI: Docling + Tesseract + OpenCV, POST /extract
 ├─ packages/
-│  ├─ shared/     # kiểu dữ liệu, schema 履歴書 (zod), hằng số
-│  └─ i18n/       # 5 ngôn ngữ (chuyển từ assets/i18n.js)
-├─ design/        # bộ mockup HTML hiện tại (index.html, app/, viewer/…)
+│  ├─ db/         # Prisma schema, migrations, seed, PrismaClient
+│  └─ shared/     # zod schema 履歴書, hằng số, messages/{en,ja,vi,id,my}.json (sinh từ assets/i18n.js)
+├─ .claude/       # agents/ · skills/ · workflows/build-rireki.js (xem mục 11)
 ├─ deploy/        # docker-compose, Caddyfile, Dockerfiles, minio/init.sh
-└─ docs/          # tài liệu này
+├─ docs/          # tài liệu này
+└─ index.html, app/, public/, viewer/, assets/   # bộ mockup = spec
 ```
 
 ## 10. Lộ trình triển khai
 
-1. **Tuần 1–2** · Khởi tạo monorepo, Prisma schema (tenants, users, candidates, cv, videos, documents, share_links, viewers, view_events, audit_logs), auth + subdomain, Compose chạy đủ hạ tầng.
+1. **Tuần 1–2** · Khởi tạo monorepo, Prisma schema (better-auth + candidates/cv Json/videos/documents/share_links/viewers/view_events/audit_logs), better-auth + subdomain, Compose chạy đủ hạ tầng.
 2. **Tuần 3–4** · CRUD nhân sự, form 7 bước, upload MinIO, render 履歴書 (HTML → PDF/ảnh), danh sách + lọc.
 3. **Tuần 5–6** · Worker video HLS + watermark; extractor (Docling/Tesseract/OpenCV, cắt ảnh thẻ, ánh xạ theo mẫu) + Claude cho CV lạ; màn hình kiểm tra import.
 4. **Tuần 7–8** · Link gửi khách (mật khẩu, định danh, chỉ xem/cho tải, hạn), trang khách, tracking, email thông báo.
 5. **Tuần 9** · Thành viên & vai trò, cài đặt công ty/thương hiệu, audit log, backup, CI/CD, chạy thử với một công ty phái cử.
+
+## 11. Workflow agent để code ứng dụng
+
+Trong `.claude/` có đủ cấu hình để Claude Code tự xây ứng dụng theo đúng bộ mockup, với luật xuyên suốt
+**"chọn cách đơn giản hơn, ít code hơn, có thư viện thì dùng"** (ghi trong `CLAUDE.md`, mọi agent đều đọc).
+
+| Thành phần | Nội dung |
+|---|---|
+| `CLAUDE.md` | Luật vàng, bảng quyết định (Next.js full-stack, better-auth, Prisma + Json, MinIO, BullMQ, Playwright, Docling, Claude), layout repo, lệnh, Definition of Done, phân vùng path khi chạy song song |
+| `.claude/agents/` | 7 subagent: `planner` (viết spec, chỉ đọc), `fullstack-dev` (Next.js + Prisma), `worker-dev` (BullMQ/ffmpeg/Playwright), `extractor-dev` (Python), `devops` (scaffold, Docker, CI, tích hợp), `reviewer` (một lăng kính mỗi lần), `qa` (Vitest + Playwright e2e, 5 ngôn ngữ, 400px) |
+| `.claude/skills/` | 10 skill: `rireki-conventions`, `rirekisho-schema` (zod + Prisma, nguồn sự thật), `mockup-to-nextjs`, `tenant-auth`, `storage-minio`, `media-pipeline`, `share-links-protection`, `cv-extraction`, `run-and-verify`, `review-checklist` |
+| `.claude/workflows/build-rireki.js` | Script điều phối 5 pha: **Scaffold** (1 devops) → **Foundation** (3 lane song song: db · ui tĩnh · extractor, rồi tích hợp) → **Features** (pipeline 5 tính năng: spec → code → 3 lăng kính review → fix; lane theo path riêng) → **Integration & QA** (tối đa 3 vòng tích hợp + QA + fix) → **Review** (4 lăng kính toàn repo, xác minh đối kháng, fix, QA cuối) |
+
+Chạy: trong Claude Code tại repo, `/workflow build-rireki` (hoặc "use a workflow build-rireki"); chạy từng pha bằng
+`args: {"phases": ["scaffold"]}` … Ước tính ~45–60 agent, 6–10 triệu token cho một lượt đầy đủ; có thể resume
+bằng `resumeFromRunId` khi sửa script.

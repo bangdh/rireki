@@ -7,6 +7,8 @@ password-protected, view-only links to clients in Japan with view tracking.
 
 **Live demo:** https://bangdh.github.io/rireki/ (GitHub Pages, redeployed by `.github/workflows/pages.yml` on every push to `main`).
 
+**Build it with agents:** `.claude/` holds `CLAUDE.md` (project rules), 7 subagents, 10 skills and the `build-rireki` workflow (`/workflow build-rireki` in Claude Code). See `docs/tech-stack.md` §11.
+
 **Tech stack & Docker deployment:** [`docs/tech-stack.md`](docs/tech-stack.md) · [`deploy/`](deploy/) (Docker Compose with Caddy, PostgreSQL, Redis, MinIO, worker).
 
 ## Open the mockups

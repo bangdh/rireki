@@ -1,6 +1,6 @@
 # Rireki — full stack in Docker Compose.
 #   docker compose up -d                       → infrastructure + Caddy (serves the design mockups at design.${DOMAIN})
-#   docker compose --profile app up -d --build → + web / api / worker (once apps/ exists)
+#   docker compose --profile app up -d --build → + web / worker / extractor (once apps/ exists)
 #   docker compose --profile dev up -d         → + Mailpit (fake SMTP) for local development
 #   docker compose --profile prod up -d        → + nightly Postgres backups
 name: rireki
@@ -81,6 +81,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+      MINIO_API_CORS_ALLOW_ORIGIN: https://*.${DOMAIN},https://${DOMAIN}
     ports:
       - "127.0.0.1:9001:9001"       # admin console, reach it through an SSH tunnel
     volumes:
@@ -115,21 +116,8 @@ services:
     restart: unless-stopped
     environment:
       <<: *app-env
-      API_INTERNAL_URL: http://api:3000
-    depends_on:
-      api:
-        condition: service_healthy
-
-  api:
-    profiles: ["app"]
-    build:
-      context: ../apps/api
-      dockerfile: ../../deploy/dockerfiles/api.Dockerfile
-    image: ghcr.io/bangdh/rireki-api:${IMAGE_TAG:-latest}
-    restart: unless-stopped
-    environment:
-      <<: *app-env
       PORT: "3000"
+      RENDER_SECRET: ${RENDER_SECRET}
     depends_on:
       postgres:
         condition: service_healthy
@@ -138,7 +126,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -153,6 +141,8 @@ services:
     environment:
       <<: *app-env
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      WEB_INTERNAL_URL: http://web:3000
+      RENDER_SECRET: ${RENDER_SECRET}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
       EXTRACTOR_URL: http://extractor:8000

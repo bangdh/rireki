@@ -3,7 +3,7 @@
 	# Certificates for tenant subdomains are issued on first request; the API
 	# confirms the subdomain exists before Caddy asks Let's Encrypt.
 	on_demand_tls {
-		ask http://api:3000/internal/tls/ask
+		ask http://web:3000/api/internal/tls/ask
 	}
 }
 
@@ -33,7 +33,5 @@ https:// {
 		on_demand
 	}
 	encode zstd gzip
-	@api path /api/* /internal/* /s/*/stream/*
-	reverse_proxy @api api:3000
 	reverse_proxy web:3000
 }

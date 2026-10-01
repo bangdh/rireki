@@ -21,7 +21,7 @@ Starts Caddy, PostgreSQL, Redis, MinIO and the one-shot `minio-init` job (bucket
 application user). Caddy already serves the design mockups at `https://design.<DOMAIN>/`.
 MinIO console: `ssh -L 9001:localhost:9001 <vps>` then open http://localhost:9001.
 
-## 3. Full application (once `apps/web`, `apps/api`, `apps/worker`, `apps/extractor` exist)
+## 3. Full application (once `apps/web`, `apps/worker`, `apps/extractor` exist)
 
 ```bash
 docker compose --profile app up -d --build
@@ -29,7 +29,7 @@ docker compose --profile app --profile prod up -d      # + nightly Postgres back
 docker compose --profile app --profile dev up -d       # + Mailpit at http://localhost:8025
 ```
 
-Images are tagged `ghcr.io/bangdh/rireki-{web,api,worker,extractor}:${IMAGE_TAG}`. In CI, build and push them,
+Images are tagged `ghcr.io/bangdh/rireki-{web,worker,extractor}:${IMAGE_TAG}`. `web` serves the UI and the API. In CI, build and push them,
 then on the server: `docker compose --profile app pull && docker compose --profile app up -d`.
 
 ## 4. Day-2 operations
