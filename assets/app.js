@@ -126,6 +126,7 @@
     $$('[data-i18n-placeholder]').forEach(function (el) { var v = t(el.getAttribute('data-i18n-placeholder'), lang); if (v != null) el.placeholder = v; });
     $$('select.lang-select').forEach(function (s) { s.value = lang; });
     store.set(LANG_KEY, lang);
+    if (typeof labelTables === 'function') labelTables();
   }
   function renderLangSwitchers() {
     $$('[data-lang-switch]').forEach(function (host) {
@@ -344,6 +345,26 @@
     });
   }
 
+
+  /* ---------- phone cards: label every cell with its column header ---------- */
+  function labelTables() {
+    $$('table.table').forEach(function (table) {
+      var heads = $$('thead th', table).map(function (th) { return th.textContent.trim(); });
+      $$('tbody tr', table).forEach(function (tr) {
+        var cells = Array.prototype.filter.call(tr.children, function (c) { return c.tagName === 'TD'; });
+        var titled = false;
+        cells.forEach(function (td, i) {
+          var label = heads[i] || '';
+          td.setAttribute('data-label', label);
+          var onlyCheckbox = td.children.length === 1 && td.firstElementChild.matches('input[type=checkbox]');
+          if (!titled && (td.querySelector('.person, .cell-primary') || (i === 0 && td.querySelector('a.strong')))) { td.setAttribute('data-card-title', ''); titled = true; }
+          else if (onlyCheckbox) td.setAttribute('data-card-check', '');
+          else if (td.querySelector('.row-actions') || (label === '' && td.querySelector('.btn') && !td.querySelector('.input, .select'))) td.setAttribute('data-card-actions', '');
+        });
+      });
+    });
+  }
+
   /* ---------- viewer protection ---------- */
   function initProtection() {
     if (document.body.getAttribute('data-protected') !== 'true') return;
@@ -382,6 +403,7 @@
     initTabs();
     initSteppers();
     initControls();
+    labelTables();
     $$('[data-bar-chart]').forEach(renderBarChart);
     renderWatermarks();
     initProtection();
@@ -390,5 +412,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 
-  window.RirekiUI = { toast: toast, applyLang: applyLang, t: t };
+  window.RirekiUI = { toast: toast, applyLang: applyLang, t: t, labelTables: labelTables };
 })();

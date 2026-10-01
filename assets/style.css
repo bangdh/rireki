@@ -389,6 +389,9 @@ code, kbd { font-family: var(--font-mono); font-size: 12.5px; }
 .tabs-pills { display: flex; gap: 4px; flex-wrap: wrap; }
 .tabs-pills .tab { border-radius: 8px; border-bottom: 0; margin: 0; padding: 8px 12px; }
 .tabs-pills .tab.active { background: var(--primary-soft); color: var(--primary-ink); }
+.grid-settings { grid-template-columns: 220px minmax(0, 1fr); }
+.grid-doc { grid-template-columns: minmax(0, .9fr) minmax(0, 1.3fr); }
+.grid-side-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 24px; }
 .subnav { display: flex; flex-direction: column; gap: 2px; }
 .subnav a { padding: 8px 12px; border-radius: 8px; color: var(--text-2); font-weight: 500; display: flex; gap: 10px; align-items: center; }
 .subnav a.active { background: var(--primary-soft); color: var(--primary-ink); }
@@ -537,6 +540,47 @@ details.menu > .menu-list .menu-head { padding: 6px 10px 4px; font-size: 11px; c
 .lang-scale .mark { position: absolute; top: 24px; left: calc(var(--v) * 10%); transform: translateX(-50%); width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; border-bottom: 13px solid var(--success); }
 .rirekisho .lang-note { font-family: var(--font-ui); font-size: 11.5px; color: var(--text-2); margin-top: 4px; line-height: 1.6; }
 .rirekisho .lang-note b { color: var(--text); }
+
+
+/* ---------- phone: table rows become rich cards (PC/tablet unchanged) ---------- */
+@media (max-width: 640px) {
+  .table-wrap { overflow: visible; }
+  .table, .table tbody, .table tr, .table td { display: block; }
+  .table thead { display: none; }
+  .table tbody { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+  .table tbody tr { position: relative; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px; box-shadow: var(--shadow-sm); }
+  .table tbody tr:hover { background: var(--surface); }
+  .table tbody tr:last-child td { border-bottom: 1px dashed var(--border); }
+  .table td { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 6px; padding: 7px 0; border: 0; border-bottom: 1px dashed var(--border); text-align: right; min-width: 0; }
+  .table td:empty { display: none; }
+  .table tbody tr td:last-child, .table tbody tr:last-child td:last-child { border-bottom: 0; }
+  .table td::before { content: attr(data-label); flex: 0 0 38%; margin-right: auto; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); overflow-wrap: anywhere; }
+  .table td[data-label=""]::before, .table td:not([data-label])::before { display: none; }
+  .table td[data-card-title] { display: block; text-align: left; padding: 0 0 10px; border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+  .table tr:has(td[data-card-check]) td[data-card-title] { padding-right: 36px; }
+  .table .person { min-width: 0; }
+  .table .person .n { white-space: normal; }
+  .table td[data-card-title]::before { display: none; }
+  .table td[data-card-check] { position: absolute; top: 12px; right: 12px; padding: 0; border: 0; width: auto; }
+  .table td[data-card-check]::before { display: none; }
+  .table td[data-card-actions] { justify-content: flex-end; border: 0; padding: 10px 0 0; }
+  .table td[data-card-actions]::before { display: none; }
+  .table td[data-card-actions] .row-actions { opacity: 1; }
+  .table td .input, .table td .select, .table td .textarea { flex: 1; min-width: 0; width: auto; }
+  .table td > .row, .table td > .row-nowrap { justify-content: flex-end; flex: 1; min-width: 0; }
+  .table td.cell-sub, .table td .cell-sub { text-align: right; }
+  .table td .person { justify-content: flex-start; text-align: left; }
+  .pagination { padding: 10px 12px; }
+  .grid-settings, .grid-doc, .grid-side-main { grid-template-columns: minmax(0, 1fr); }
+  .subnav { flex-direction: row; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .subnav a { flex: 0 0 auto; white-space: nowrap; }
+  .topbar { gap: 6px; }
+  .topbar .search { flex: 1 1 40px; min-width: 0; }
+  .topbar .search .input { min-width: 0; }
+  .topbar .lang-select { max-width: 110px; }
+  .row-nowrap > .input, .row-nowrap > .select { min-width: 0; flex: 1 1 0; }
+  .tree .node .path, .screen .path { overflow-wrap: anywhere; }
+}
 
 /* ---------- public site ---------- */
 .site-header { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 30; background: color-mix(in srgb, var(--surface) 90%, transparent); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
