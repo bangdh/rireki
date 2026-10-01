@@ -344,7 +344,7 @@
       <div class="box"><span class="who">App</span><b>web · Next.js</b>Tenant app + trang khách, i18n 5 ngôn ngữ, hls.js</div><span class="arrow">→</span>
       <div class="box"><span class="who">App</span><b>api · NestJS + Prisma</b>Auth, tenant, nhân sự, link gửi, tracking, presigned URL</div><span class="arrow">→</span>
       <div class="box alt"><span class="who">Data</span><b>PostgreSQL 16 · Redis 7 · MinIO</b>tenant_id trên mọi bảng · session/queue · 5 bucket private</div><span class="arrow">→</span>
-      <div class="box"><span class="who">Jobs</span><b>worker · BullMQ</b>ffmpeg → HLS + watermark, DOCX→PDF→ảnh trang, Claude API (claude-opus-5-5) đọc CV → JSON 履歴書, email</div>
+      <div class="box"><span class="who">Jobs</span><b>worker · BullMQ + extractor · Python</b>ffmpeg → HLS + watermark · Docling/Tesseract/OpenCV tách text, bảng và ảnh thẻ ở local · CV theo mẫu ánh xạ bằng luật · Claude API (claude-opus-5-5) chỉ nhận Markdown ~1–2K token khi cần · email</div>
     </div>
     <div class="two mt-16">
       <div class="card"><div class="card-header"><h3>Bucket MinIO</h3></div><div class="table-wrap"><table class="table">

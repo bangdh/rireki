@@ -155,6 +155,7 @@ services:
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+      EXTRACTOR_URL: http://extractor:8000
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,6 +163,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      extractor:
+        condition: service_healthy
     deploy:
       resources:
         limits:
@@ -169,6 +172,38 @@ services:
           memory: 4g
     tmpfs:
       - /tmp:size=4g
+
+  extractor:
+    profiles: ["app"]
+    build:
+      context: ../apps/extractor
+      dockerfile: ../../deploy/dockerfiles/extractor.Dockerfile
+    image: ghcr.io/bangdh/rireki-extractor:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    environment:
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: ${S3_REGION:-ap-northeast-1}
+      S3_FORCE_PATH_STYLE: "true"
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      OCR_LANGS: ${OCR_LANGS:-jpn+eng}
+      EXTRACTOR_WORKERS: ${EXTRACTOR_WORKERS:-2}
+      OMP_NUM_THREADS: "2"
+    depends_on:
+      minio-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 3g
+    tmpfs:
+      - /tmp:size=2g
 
   mailpit:
     profiles: ["dev"]

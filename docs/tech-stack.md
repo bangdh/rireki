@@ -10,7 +10,7 @@
 | Frontend (tenant app + trang khách) | **Next.js 15 (React, TypeScript)**, Tailwind CSS, `next-intl` (5 ngôn ngữ), `hls.js` | SSR đọc được subdomain từ `Host` để resolve tenant; middleware chặn/định tuyến; i18n có sẵn; chuyển trực tiếp token màu/thành phần từ bộ mockup |
 | Backend API | **NestJS (TypeScript)** + **Prisma** | Cấu trúc module rõ (tenant, auth, candidates, shares, tracking), chung ngôn ngữ và kiểu dữ liệu với frontend, một đội nhỏ bảo trì được |
 | Worker nền | **BullMQ** (Node) + `ffmpeg`, LibreOffice headless, `poppler`, `sharp` | Chuyển mã video → HLS, DOCX→PDF→ảnh trang, ghép watermark, gửi email, dọn file tạm |
-| Trích xuất CV bằng AI | **Claude API** (`claude-opus-5-5`, structured outputs, PDF/ảnh đầu vào) | Đọc trực tiếp PDF/ảnh chụp CV tiếng Việt/Myanmar/Bengal/Indo/Nhật, trả JSON đúng schema 履歴書; không cần OCR riêng. Khối lượng lớn: `claude-sonnet-5-5` rẻ hơn một nửa |
+| Trích xuất CV | **extractor** (Python: Docling, Tesseract, OpenCV) + **Claude API** (`claude-opus-5-5`, structured outputs) | Text, bảng và ảnh thẻ được tách ở local (mục 5); CV theo mẫu công ty ánh xạ bằng luật không cần LLM; Claude chỉ nhận Markdown ~1–2K token cho CV lạ hoặc text tự do |
 | CSDL | **PostgreSQL 16** | Multi-tenant bằng `tenant_id` trên mọi bảng (+ Row Level Security khi cần), full-text `pg_trgm` cho tìm theo tên/katakana/mã |
 | Cache & hàng đợi | **Redis 7** | Session, rate-limit cổng mật khẩu, hàng đợi BullMQ, đếm lượt xem gần thời gian thực |
 | Object storage | **MinIO** (S3 API) → AWS S3 sau | SDK `@aws-sdk/client-s3`, presigned URL ngắn hạn; đổi endpoint là xong |
@@ -34,6 +34,7 @@ flowchart LR
     Web[web · Next.js]
     API[api · NestJS]
     Worker[worker · BullMQ<br/>ffmpeg · LibreOffice · sharp]
+    Extractor[extractor · Python<br/>Docling · Tesseract · OpenCV]
     PG[(PostgreSQL 16)]
     Redis[(Redis 7)]
     MinIO[(MinIO · S3 API<br/>originals · media · renders · public)]
@@ -53,7 +54,9 @@ flowchart LR
   Redis -->|job| Worker
   Worker --> MinIO
   Worker --> PG
-  Worker --> Claude
+  Worker --> Extractor
+  Extractor --> MinIO
+  Worker -->|Markdown| Claude
   Worker --> SMTP
 ```
 
@@ -80,12 +83,65 @@ flowchart LR
 - **CV**: DOCX → PDF (LibreOffice) → ảnh trang (`pdftoppm`) → `rireki-renders`. Link chỉ xem: API lấy ảnh nền, ghép watermark người xem bằng `sharp` (vài ms), trả về với `Cache-Control: no-store`. Link cho tải: presigned GET 5 phút tới PDF, mỗi lần tải ghi `ViewEvent(download)`.
 - **Chuyển sang AWS S3**: đổi `S3_ENDPOINT`, `S3_REGION`, bỏ `S3_FORCE_PATH_STYLE`; đồng bộ dữ liệu bằng `mc mirror minio/rireki-originals s3/rireki-originals`. Khuyến nghị để MinIO ở chế độ single-node với ổ riêng, bật `mc mirror` định kỳ sang S3 làm backup từ ngày đầu.
 
-## 5. Trích xuất 履歴書 bằng Claude API
+## 5. Trích xuất 履歴書: tách text và ảnh ở local, LLM chỉ nhận text
 
-- Worker nhận file → nếu DOCX thì chuyển PDF → gửi PDF (base64 hoặc Files API, ≤32 MB, ≤100 trang) kèm schema JSON của 履歴書 (đúng 7 bước form) dưới dạng `output_config.format` → nhận JSON có sẵn `confidence` cho từng trường → lưu `candidate_drafts` để nhân viên kiểm tra (màn hình `candidate-import`).
-- Model mặc định `claude-opus-5-5` (đọc tốt chữ viết tay, bảng, tiếng Myanmar/Bengal); ước tính 3–6K token/CV → khoảng 0,03–0,05 USD mỗi CV. Khối lượng lớn hoặc bulk import: `claude-sonnet-5-5` (2 USD/10 USD mỗi triệu token) hoặc Batches API (giảm 50%).
-- Dùng SDK chính thức `@anthropic-ai/sdk`; bật streaming cho file dài; `max_tokens` ~16000; khóa API đặt trong `.env` của worker, không bao giờ gửi ra frontend.
-- Dữ liệu cá nhân: gọi API với tổ chức đã bật retention phù hợp; không log nội dung CV; chỉ lưu kết quả JSON trong Postgres.
+Nguyên tắc: **không gửi cả file PDF/ảnh cho LLM**. Một service `extractor` (Python, open source) đọc file ở local, trả về Markdown có bảng + ảnh thẻ đã cắt; Claude chỉ nhận Markdown (≈1–2K token) để ánh xạ vào schema 履歴書. Ảnh trang chỉ gửi kèm khi OCR có độ tin cậy thấp.
+
+### 5.1 Công cụ open source (đã lọc theo giấy phép dùng được cho SaaS)
+
+| Việc | Công cụ | Giấy phép | Ghi chú |
+|---|---|---|---|
+| Đọc DOCX/PDF/ảnh → Markdown có bảng, OCR, tách ảnh | **Docling** (IBM) | MIT | Một thư viện cho mọi định dạng: DOCX qua `python-docx`, PDF qua `docling-parse` + mô hình layout + TableFormer (giữ cấu trúc bảng 学歴/職歴 ngay cả từ ảnh scan), OCR cắm Tesseract/RapidOCR, `generate_picture_images=True` trả về từng ảnh trong tài liệu |
+| OCR | **Tesseract 5** (`jpn`, `eng`, `vie`, `mya`, `ben`, `ind`) | Apache-2.0 | Có đủ ngôn ngữ cần; tiếng Nhật in ấn đạt tốt với `tessdata_best`; trả độ tin cậy từng từ để quyết định fallback |
+| OCR tiếng Nhật/Việt chính xác hơn | **RapidOCR** (PaddleOCR trên ONNX) | Apache-2.0 | Nhẹ, không cần PyTorch; chưa hỗ trợ Myanmar/Bengali nên dùng song song với Tesseract |
+| PDF có lớp text (không cần OCR) | **pdfplumber** / `pdftotext -layout` (poppler) | MIT / GPL (gọi CLI) | Lấy chữ + toạ độ ô bảng, nhanh (vài trăm ms/trang) |
+| Ảnh nhúng trong PDF | `pdfimages -png` (poppler) hoặc `pypdf` | GPL (CLI) / BSD | Liệt kê kích thước, cắt ảnh có tỉ lệ 3:4 ở trang 1 |
+| Ảnh nhúng trong DOCX | `zipfile` đọc `word/media/*` | — | DOCX là ZIP; ảnh thẻ nằm sẵn ở đó, không cần OCR |
+| Tiền xử lý ảnh chụp điện thoại | **OpenCV** (tìm viền trang → `warpPerspective`, khử nghiêng, adaptive threshold) | Apache-2.0 | Bắt buộc với ảnh chụp như mẫu 3 trang ở trên (nghiêng, bóng đổ) |
+| Phát hiện ảnh thẻ trên trang scan | **OpenCV YuNet** (face detector ONNX, `cv2.FaceDetectorYN`) | Apache-2.0 | Tìm mặt ở góc trên phải → cắt khung 3:4 quanh mặt; fallback cắt theo toạ độ ô 写真 của mẫu |
+| HEIC từ iPhone | `pillow-heif` | LGPL | Chuyển sang JPEG trước khi xử lý |
+
+Tránh **PyMuPDF / pymupdf4llm, MinerU** (AGPL, phải mua giấy phép thương mại) và **Marker / Surya** (GPL kèm điều kiện doanh thu); **Yomitoku** (OCR tiếng Nhật) chỉ cho phi thương mại.
+
+### 5.2 Pipeline
+
+```mermaid
+flowchart LR
+  F[File tải lên<br/>DOCX · PDF · JPG/HEIC] --> T{Loại?}
+  T -->|DOCX| D[Docling đọc text + bảng<br/>ảnh từ word/media]
+  T -->|PDF có text| P[Docling / pdfplumber<br/>pdfimages lấy ảnh]
+  T -->|PDF scan · ảnh chụp| O[OpenCV: nắn phối cảnh, khử nghiêng<br/>→ OCR Tesseract/RapidOCR<br/>→ YuNet cắt ảnh thẻ]
+  D --> M[Markdown + độ tin cậy<br/>+ photo.jpg]
+  P --> M
+  O --> M
+  M --> R{Khớp mẫu 履歴書<br/>của công ty?}
+  R -->|có| K[Ánh xạ nhãn → trường<br/>bằng luật, không cần LLM<br/>confidence 0.9]
+  R -->|không / thiếu| L[Claude API: Markdown + schema<br/>→ JSON + confidence<br/>ảnh trang chỉ khi OCR < 85%]
+  K --> V[Màn hình kiểm tra import]
+  L --> V
+```
+
+1. **Nhận dạng loại file.** PDF: đếm ký tự lớp text (`pdfplumber`); dưới 50 ký tự/trang coi là scan.
+2. **DOCX.** Docling → Markdown (bảng giữ nguyên hàng/cột). Ảnh thẻ: giải nén `word/media/`, chọn ảnh tỉ lệ 3:4 (0,7–0,8), cạnh ≥ 200 px, xuất hiện đầu tiên theo thứ tự tài liệu.
+3. **PDF số.** Docling parse (hoặc pdfplumber khi chỉ cần text) → Markdown. Ảnh: `pdfimages -list` rồi cắt ảnh 3:4 ở trang 1; nếu không có ảnh nhúng (ảnh đã bị flatten) dùng cách của bước 4 trên trang render 300 dpi.
+4. **Scan / ảnh chụp.** `pdftoppm -r 300` (hoặc ảnh gốc) → OpenCV tìm 4 góc trang, `warpPerspective`, khử nghiêng, chuyển xám + adaptive threshold → Docling với `force_full_page_ocr` và Tesseract `lang=jpn+eng` (+ `vie`/`mya`/`ben`/`ind` theo quốc gia tenant) → Markdown + điểm tin cậy trung bình. Ảnh thẻ: YuNet tìm mặt trong phần tư trên phải, cắt khung 3:4 (mở rộng 1,6× bề rộng mặt), upscale lên 600×800; nếu không thấy mặt, cắt theo toạ độ ô 写真 của mẫu đã nắn.
+5. **Ánh xạ theo mẫu.** Nếu Markdown chứa các nhãn cố định của mẫu công ty (フリガナ, 氏名, 生年月日, 国籍, 学歴, 職歴, 免許・資格, 語学力, 配偶者, 身長, 服のサイズ, 宗教的に注意が必要な事項, 食べられないもの…), bộ luật `label → field` điền thẳng vào schema, kể cả bảng 学歴/職歴 (hàng = năm, tháng, nội dung, 入学/卒業). Phần lớn CV theo mẫu không cần LLM.
+6. **LLM khi cần.** CV không theo mẫu, trường thiếu, hoặc text tự do (志望動機・自己PR) cần chuẩn hoá: gửi Markdown + JSON schema (structured outputs) tới `claude-opus-5-5`; system prompt + schema đặt trước và bật prompt caching (prefix ổn định) nên mỗi lần chỉ trả tiền phần Markdown; trang nào OCR tin cậy < 85% mới đính kèm ảnh trang đó. Khối lượng lớn: `claude-sonnet-5-5` hoặc Batches API.
+7. **Kiểm tra.** Kết quả (trường + confidence + ảnh thẻ) hiện ở màn hình `candidate-import`; nhân viên xác nhận rồi lưu; file gốc và ảnh thẻ vào `rireki-originals`.
+
+### 5.3 Token và chi phí
+
+| Cách | Token vào / CV 3 trang | Token ra | Chi phí ước tính (Opus 5.5: 4 USD / 20 USD mỗi triệu) |
+|---|---|---|---|
+| Gửi thẳng PDF cho Claude | 5.000–9.000 (mỗi trang được xử lý như ảnh + text) | ~1.000 (JSON) | ≈ 0,04–0,06 USD |
+| Text local → Claude, có cache prompt | 1.000–2.000 (+ ~1.500 cache đọc, giá 10%) | ~1.000 | ≈ 0,025–0,03 USD |
+| Khớp mẫu bằng luật, không LLM | 0 | 0 | 0 |
+
+Tiền chủ yếu nằm ở token ra (JSON), nên lợi ích lớn nhất của tách text local không chỉ là chi phí: chuỗi chính xác tuyệt đối (mã, số điện thoại, ngày tháng không bị "đọc nhầm"), nhanh hơn (OCR 3 trang ≈ 5–10 giây CPU), chạy được khi không có LLM, và không phải gửi ảnh chân dung ra ngoài khi không cần.
+
+### 5.4 Đóng gói
+
+Service `extractor` (Python 3.12, FastAPI) trong Compose, profile `app`: `POST /extract` nhận đường dẫn object trong MinIO, trả `{markdown, pages[], confidence, tables[], photo_key, template_match}`; worker Node gọi qua mạng nội bộ. Image dựng từ `python:3.12-slim` + `tesseract-ocr` và gói ngôn ngữ `jpn vie mya ben ind eng` + `poppler-utils` + `libgl1` (OpenCV) + `docling` (kéo PyTorch CPU, ảnh ~2,5 GB; chạy 2 request song song trên 2 vCPU là đủ cho vài chục CV/giờ). Phiên bản nhẹ không có mô hình layout (pdfplumber + Tesseract + OpenCV, ~600 MB) dùng được khi CV luôn theo mẫu công ty.
 
 ## 6. Bảo mật & bảo vệ nội dung
 
@@ -109,6 +165,7 @@ Toàn bộ chạy bằng một file `deploy/docker-compose.yml` (chi tiết tron
 | `web` | build `apps/web` | Next.js | `app` |
 | `api` | build `apps/api` | NestJS | `app` |
 | `worker` | build `apps/worker` | BullMQ + ffmpeg/LibreOffice/poppler, font Noto JP/Myanmar/Bengali | `app` |
+| `extractor` | build `apps/extractor` | Python: Docling, Tesseract (jpn/vie/mya/ben/ind/eng), OpenCV, FastAPI `POST /extract` | `app` |
 | `mailpit` | `axllent/mailpit` | hộp thư giả khi dev | `dev` |
 | `pgbackup` | `prodrigestivill/postgres-backup-local` | dump hằng đêm | `prod` |
 
@@ -143,6 +200,6 @@ rireki/
 
 1. **Tuần 1–2** · Khởi tạo monorepo, Prisma schema (tenants, users, candidates, cv, videos, documents, share_links, viewers, view_events, audit_logs), auth + subdomain, Compose chạy đủ hạ tầng.
 2. **Tuần 3–4** · CRUD nhân sự, form 7 bước, upload MinIO, render 履歴書 (HTML → PDF/ảnh), danh sách + lọc.
-3. **Tuần 5–6** · Worker video HLS + watermark, trích xuất CV bằng Claude, màn hình kiểm tra import.
+3. **Tuần 5–6** · Worker video HLS + watermark; extractor (Docling/Tesseract/OpenCV, cắt ảnh thẻ, ánh xạ theo mẫu) + Claude cho CV lạ; màn hình kiểm tra import.
 4. **Tuần 7–8** · Link gửi khách (mật khẩu, định danh, chỉ xem/cho tải, hạn), trang khách, tracking, email thông báo.
 5. **Tuần 9** · Thành viên & vai trò, cài đặt công ty/thương hiệu, audit log, backup, CI/CD, chạy thử với một công ty phái cử.
