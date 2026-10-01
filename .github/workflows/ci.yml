@@ -12,27 +12,6 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_USER: rireki
-          POSTGRES_PASSWORD: rireki
-          POSTGRES_DB: rireki
-        ports: ["5432:5432"]
-        options: >-
-          --health-cmd "pg_isready -U rireki -d rireki"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-      redis:
-        image: redis:7-alpine
-        ports: ["6379:6379"]
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -41,10 +20,27 @@ jobs:
           node-version: 22
           cache: pnpm
       - uses: astral-sh/setup-uv@v6
-      - run: cp .env.example .env
+      # The app reads the root .env (same values as the local services below); compose reads deploy/.env.
+      - run: cp .env.example .env && cp deploy/.env.example deploy/.env
+      # Same Postgres / Redis / MinIO (+ buckets and app user) as production, from deploy/docker-compose.yml.
+      # POSTGRES_PASSWORD overrides deploy/.env so it matches DATABASE_URL in .env.example.
+      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --wait postgres redis minio
+        env:
+          POSTGRES_PASSWORD: rireki
+      - run: docker compose -f deploy/docker-compose.yml --env-file deploy/.env run --rm minio-init
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @rireki/extractor run setup
       - run: pnpm typecheck && pnpm lint && pnpm test && pnpm build
+      # Playwright e2e against the built app: migrations and the demo seed first, then the server.
+      - run: pnpm --filter @rireki/db migrate:deploy && pnpm --filter @rireki/db seed
+      - run: pnpm --filter @rireki/web exec playwright install --with-deps chromium
+      - run: echo "127.0.0.1 saoviet.localhost" | sudo tee -a /etc/hosts
+      - run: |
+          (pnpm --filter @rireki/web start > web.log 2>&1 &)
+          curl -sf --retry 30 --retry-connrefused --retry-delay 1 http://localhost:3000/api/health
+      - run: pnpm --filter @rireki/web e2e
+      - if: failure()
+        run: cat web.log
 
   images:
     needs: check

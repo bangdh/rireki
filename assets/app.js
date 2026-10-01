@@ -102,13 +102,6 @@
   /* ---------- i18n ---------- */
   var LANGS = [['en', 'English'], ['ja', '日本語'], ['vi', 'Tiếng Việt'], ['my', 'မြန်မာ'], ['id', 'Bahasa Indonesia']];
   var I18N = window.RIREKI_I18N || { en: {} };
-  var MSG = {
-    copied: { en: 'Copied', ja: 'コピーしました', vi: 'Đã sao chép', id: 'Disalin', my: 'ကူးယူပြီး' },
-    blocked: { en: 'Not available on a view-only link', ja: '閲覧専用リンクでは利用できません', vi: 'Không khả dụng trên link chỉ xem', id: 'Tidak tersedia pada tautan hanya-lihat', my: 'ကြည့်ရုံသာလင့်ခ်တွင် မရနိုင်ပါ' },
-    screenshot: { en: 'Screenshots are not permitted. This attempt was logged.', ja: 'スクリーンショットは禁止されています。この操作は記録されました。', vi: 'Không được chụp màn hình. Hành động này đã được ghi lại.', id: 'Tangkapan layar tidak diizinkan. Percobaan ini dicatat.', my: 'Screenshot ရိုက်ခွင့်မပြုပါ။ ဤကြိုးပမ်းမှုကို မှတ်တမ်းတင်ထားသည်။' },
-    sent: { en: 'Sent to the sender', ja: '送出機関に送信しました', vi: 'Đã gửi cho bên gửi', id: 'Dikirim ke pengirim', my: 'ပို့သူထံ ပို့ပြီး' },
-    saved: { en: 'Saved', ja: '保存しました', vi: 'Đã lưu', id: 'Tersimpan', my: 'သိမ်းပြီး' }
-  };
   var currentLang = 'en';
   function t(key, lang) {
     lang = lang || currentLang;
@@ -116,7 +109,7 @@
     if (I18N.en && I18N.en[key] != null) return I18N.en[key];
     return null;
   }
-  function msg(k) { var m = MSG[k]; return (m && (m[currentLang] || m.en)) || ''; }
+  function msg(k) { return t('ui.' + k) || ''; }
   function applyLang(lang) {
     if (!LANGS.some(function (l) { return l[0] === lang; })) lang = 'en';
     currentLang = lang;

@@ -608,6 +608,13 @@
     "views_by_day": "Lượt xem theo ngày",
     "watched": "đã xem"
   },
+  "ui": {
+    "blocked": "Không khả dụng trên link chỉ xem",
+    "copied": "Đã sao chép",
+    "saved": "Đã lưu",
+    "screenshot": "Không được chụp màn hình. Hành động này đã được ghi lại.",
+    "sent": "Đã gửi cho bên gửi"
+  },
   "viewer": {
     "back": "Tất cả ứng viên",
     "candidates_for": "Ứng viên cho",

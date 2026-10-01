@@ -6,6 +6,8 @@ export default defineConfig({
     exclude: ["e2e/**", "node_modules/**", ".next/**"],
   },
   resolve: {
-    alias: { "@": __dirname },
+    alias: { "@": import.meta.dirname },
   },
+  // tsconfig keeps jsx: preserve for Next; tests importing .tsx components need the automatic runtime here (Vite 8 = Oxc)
+  oxc: { jsx: { runtime: "automatic" } },
 });

@@ -608,6 +608,13 @@
     "views_by_day": "Views per day",
     "watched": "watched"
   },
+  "ui": {
+    "blocked": "Not available on a view-only link",
+    "copied": "Copied",
+    "saved": "Saved",
+    "screenshot": "Screenshots are not permitted. This attempt was logged.",
+    "sent": "Sent to the sender"
+  },
   "viewer": {
     "back": "All candidates",
     "candidates_for": "Candidates for",

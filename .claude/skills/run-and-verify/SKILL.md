@@ -36,6 +36,7 @@ daemon. Do not run `docker compose`; these services are already running on local
 | Browsers | Playwright **1.56.1** browsers in `/opt/pw-browsers` (`PLAYWRIGHT_BROWSERS_PATH` is set): pin `@playwright/test@1.56.1`, never run `playwright install` |
 | Unreachable | `huggingface.co` (no Docling/transformer models), GitHub release downloads (no YuNet ONNX, MinIO or Mailpit binaries); `ANTHROPIC_API_KEY` is not set, so Claude calls are mocked in tests |
 | Ports | web 3000 (`http://saoviet.localhost:3000`), extractor 8000; a feature agent that needs its own dev server uses 3001–3010 and stops it afterwards |
+| Hostname | Chromium resolves `*.localhost` by itself; curl / Node (Playwright `request`) need `127.0.0.1 saoviet.localhost` in `/etc/hosts` (already added in this container, re-add if missing) |
 | Git | the orchestrator commits after each phase; agents never commit, stash, checkout, reset or clean |
 
 ## Checks
@@ -45,7 +46,8 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm --filter @rireki/web e2e            # needs the stack running; PLAYWRIGHT_BASE_URL=http://saoviet.localhost:3000
 cd apps/extractor && pytest
 ```
-CI (`.github/workflows/ci.yml`) runs the same on every push, with Postgres/Redis/MinIO as services, then builds
+CI (`.github/workflows/ci.yml`) runs the same on every push against Postgres/Redis/MinIO started from
+`deploy/docker-compose.yml`, then `migrate:deploy` + `seed` and the Playwright e2e against `next start`, and builds
 the three images on `main`.
 
 ## Playwright e2e (apps/web/e2e/*.spec.ts) — the four flows

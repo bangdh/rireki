@@ -608,6 +608,13 @@
     "views_by_day": "Tayangan per hari",
     "watched": "ditonton"
   },
+  "ui": {
+    "blocked": "Tidak tersedia pada tautan hanya-lihat",
+    "copied": "Disalin",
+    "saved": "Tersimpan",
+    "screenshot": "Tangkapan layar tidak diizinkan. Percobaan ini dicatat.",
+    "sent": "Dikirim ke pengirim"
+  },
   "viewer": {
     "back": "Semua kandidat",
     "candidates_for": "Kandidat untuk",

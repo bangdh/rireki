@@ -9,3 +9,320 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
+
+model User {
+  id            String       @id
+  name          String
+  email         String
+  emailVerified Boolean      @default(false)
+  image         String?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sessions      Session[]
+  accounts      Account[]
+  members       Member[]
+  invitations   Invitation[]
+
+  @@unique([email])
+  @@map("user")
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime
+  token                String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+
+  @@unique([token])
+  @@index([userId])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+  @@map("account")
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+  @@map("verification")
+}
+
+model Organization {
+  id          String       @id
+  name        String
+  slug        String
+  logo        String?
+  createdAt   DateTime
+  metadata    String?
+  members     Member[]
+  invitations Invitation[]
+
+  @@unique([slug])
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member")
+  createdAt      DateTime
+
+  @@index([organizationId])
+  @@index([userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  user           User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([email])
+  @@map("invitation")
+}
+
+// ---------------------------------------------------------------------------
+// Rireki models (.claude/skills/rirekisho-schema/SKILL.md). Organization is the tenant (slug = subdomain);
+// every tenant-owned row carries tenantId = Organization.id. The CV body is one Json column validated by
+// CvSchema in @rireki/shared; searchable fields are duplicated as columns.
+// ---------------------------------------------------------------------------
+
+model TenantSettings {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique
+  codePrefix   String   @default("SV") @db.VarChar(2)
+  nextCode     Int      @default(1)
+  nameJa       String?
+  nameEn       String?
+  country      String?
+  licenseNo    String?
+  brandColor   String?
+  logoKey      String?
+  footer       String?
+  defaultLang  String   @default("vi")
+  linkDefaults Json     @default("{}")
+  updatedAt    DateTime @updatedAt
+}
+
+model Candidate {
+  id           String               @id @default(cuid())
+  tenantId     String
+  code         String
+  nameKana     String
+  nameLatin    String
+  nameNative   String?
+  dob          DateTime?
+  gender       String?
+  nationality  String?
+  status       String               @default("draft")
+  jlpt         String               @default("none")
+  tags         String[]             @default([])
+  photoKey     String?
+  cv           Json                 @default("{}")
+  completeness Int                  @default(0)
+  createdById  String?
+  updatedById  String?
+  archivedAt   DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  videos       Video[]
+  documents    Document[]
+  shareLinks   ShareLinkCandidate[]
+  viewEvents   ViewEvent[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+model Video {
+  id          String    @id @default(cuid())
+  tenantId    String
+  candidateId String
+  title       String
+  lang        String?
+  position    Int       @default(0)
+  originalKey String
+  hlsKey      String?
+  posterKey   String?
+  durationSec Int?
+  status      String    @default("uploaded")
+  createdAt   DateTime  @default(now())
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id          String    @id @default(cuid())
+  tenantId    String
+  candidateId String
+  type        String
+  name        String
+  key         String
+  size        Int
+  shareable   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model Render {
+  id          String   @id @default(cuid())
+  tenantId    String
+  candidateId String
+  version     Int
+  page        Int
+  key         String
+  createdAt   DateTime @default(now())
+
+  @@unique([candidateId, version, page])
+}
+
+model ShareLink {
+  id              String               @id @default(cuid())
+  tenantId        String
+  token           String               @unique
+  name            String
+  clientCompany   String?
+  clientName      String?
+  clientEmail     String?
+  message         String?
+  viewerLang      String               @default("ja")
+  passwordHash    String?
+  requireIdentity Boolean              @default(true)
+  allowedDomains  String[]             @default([])
+  downloadAllowed Boolean              @default(false)
+  expiresAt       DateTime?
+  maxViews        Int?
+  sections        Json                 @default("{}")
+  notifyFirstView Boolean              @default(true)
+  notifyInterest  Boolean              @default(true)
+  status          String               @default("active")
+  createdById     String
+  createdAt       DateTime             @default(now())
+  candidates      ShareLinkCandidate[]
+  viewers         Viewer[]
+  events          ViewEvent[]
+
+  @@index([tenantId, status])
+}
+
+model ShareLinkCandidate {
+  shareLinkId String
+  candidateId String
+  position    Int       @default(0)
+  shareLink   ShareLink @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@id([shareLinkId, candidateId])
+}
+
+model Viewer {
+  id          String      @id @default(cuid())
+  shareLinkId String
+  name        String?
+  email       String?
+  ip          String?
+  userAgent   String?
+  geo         String?
+  firstSeenAt DateTime    @default(now())
+  lastSeenAt  DateTime    @default(now())
+  shareLink   ShareLink   @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  events      ViewEvent[]
+}
+
+model ViewEvent {
+  id          String     @id @default(cuid())
+  tenantId    String
+  shareLinkId String
+  viewerId    String?
+  candidateId String?
+  type        String
+  durationSec Int?
+  meta        Json?
+  createdAt   DateTime   @default(now())
+  shareLink   ShareLink  @relation(fields: [shareLinkId], references: [id], onDelete: Cascade)
+  viewer      Viewer?    @relation(fields: [viewerId], references: [id], onDelete: SetNull)
+  candidate   Candidate? @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([shareLinkId, createdAt])
+  @@index([candidateId])
+  @@index([tenantId, createdAt])
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  shareLinkId String
+  viewerId    String
+  candidateId String
+  verdict     String
+  comment     String?
+  createdAt   DateTime @default(now())
+
+  @@index([shareLinkId])
+}
+
+model ImportJob {
+  id          String   @id @default(cuid())
+  tenantId    String
+  fileKey     String
+  fileName    String
+  status      String   @default("queued")
+  extracted   Json?
+  confidence  Json?
+  photoKey    String?
+  candidateId String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, status])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String?
+  action    String
+  target    String?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+}

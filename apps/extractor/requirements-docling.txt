@@ -1,0 +1,6 @@
+# Optional engine: Docling (MIT) layout model + TableFormer keep table structure on scans. Pulls PyTorch, so it is
+# installed only in deploy/dockerfiles/extractor.Dockerfile (CPU wheels):
+#   pip install -r requirements.txt -r requirements-docling.txt --extra-index-url https://download.pytorch.org/whl/cpu
+# Models are downloaded at build time (docling-tools models download) into DOCLING_ARTIFACTS_PATH; convert.py uses
+# Docling only when that directory exists.
+docling==2.131.0
