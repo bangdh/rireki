@@ -34,7 +34,7 @@ Phase 2 might add 480p and per-viewer forensic watermarks; not now.
 
 ## Serving HLS to a viewer (apps/web/app/api/s/[token]/stream/[videoId]/…)
 
-- `index.m3u8`: read the manifest from MinIO and rewrite each segment line to a presigned GET URL (60 s TTL)
+- `index.m3u8`: read the manifest from S3 and rewrite each segment line to a presigned GET URL (60 s TTL)
   on `S3_PUBLIC_ENDPOINT`; check the viewer cookie/link validity first; log `play_video` once per play.
 - Player: `hls.js` in a client component with `controlsList="nodownload"`, `disablePictureInPicture`, and the
   dynamic `Watermark` overlay (viewer name · email · time).

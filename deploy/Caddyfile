@@ -15,7 +15,7 @@
 
 # S3 endpoint used by presigned URLs (uploads from browsers, downloads when allowed)
 s3.{$DOMAIN} {
-	reverse_proxy minio:9000 {
+	reverse_proxy seaweedfs:8333 {
 		header_up Host {http.request.host}
 	}
 }

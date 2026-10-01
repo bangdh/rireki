@@ -13,5 +13,5 @@ poster is enough for phase 1; render 履歴書 pages with Playwright from the pr
 template); composite watermarks with `sharp`. Jobs are idempotent (re-running a job must be safe) and update
 `videos.status` / `renders` rows so the UI can show progress. Keep each processor in its own file under
 `apps/worker/src/jobs/`. Test the pure parts with Vitest; verify the pipeline manually against the docker-compose
-infra (MinIO, Redis) and describe exactly what you ran.
+infra (S3, Redis) and describe exactly what you ran.
 Report what exists, how to run it, and any env the integrator must add.

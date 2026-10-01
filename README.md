@@ -9,7 +9,7 @@ password-protected, view-only links to clients in Japan with view tracking.
 
 **Build it with agents:** `.claude/` holds `CLAUDE.md` (project rules), 7 subagents, 10 skills and the `build-rireki` workflow (`/workflow build-rireki` in Claude Code). See `docs/tech-stack.md` §11.
 
-**Tech stack & Docker deployment:** [`docs/tech-stack.md`](docs/tech-stack.md) · [`deploy/`](deploy/) (Docker Compose with Caddy, PostgreSQL, Redis, MinIO, worker).
+**Tech stack & Docker deployment:** [`docs/tech-stack.md`](docs/tech-stack.md) · [`deploy/`](deploy/) (Docker Compose with Caddy, PostgreSQL, Redis, SeaweedFS, worker).
 
 ## Open the mockups
 

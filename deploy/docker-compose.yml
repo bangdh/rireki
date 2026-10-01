@@ -11,10 +11,10 @@ x-app-env: &app-env
   APP_URL: https://${DOMAIN}
   DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
   REDIS_URL: redis://redis:6379
-  S3_ENDPOINT: http://minio:9000            # internal (API/worker → MinIO)
+  S3_ENDPOINT: http://seaweedfs:8333        # internal (web/worker → SeaweedFS S3 gateway)
   S3_PUBLIC_ENDPOINT: https://s3.${DOMAIN}  # presigned URLs handed to browsers
   S3_REGION: ${S3_REGION:-ap-northeast-1}
-  S3_FORCE_PATH_STYLE: "true"               # MinIO; set "false" after moving to AWS S3
+  S3_FORCE_PATH_STYLE: "true"               # SeaweedFS; set "false" after moving to AWS S3
   S3_ACCESS_KEY: ${S3_ACCESS_KEY}
   S3_SECRET_KEY: ${S3_SECRET_KEY}
   S3_BUCKET_ORIGINALS: rireki-originals
@@ -43,7 +43,7 @@ services:
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
 
   postgres:
@@ -77,39 +77,46 @@ services:
       timeout: 3s
       retries: 5
 
-  minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+  seaweedfs:
+    # Self-hosted S3 (MinIO community images were withdrawn from Docker Hub in 2026-09 and the last
+    # free release has an unpatched auth-bypass CVE). Single node: master + volume + filer + S3 gateway.
+    # The app identity is rendered into s3.json at start so the keys stay in .env.
+    image: chrislusf/seaweedfs:4.48
     restart: unless-stopped
-    command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
-      MINIO_API_CORS_ALLOW_ORIGIN: https://*.${DOMAIN},https://${DOMAIN}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        sed -e "s|__S3_ACCESS_KEY__|$$S3_ACCESS_KEY|" -e "s|__S3_SECRET_KEY__|$$S3_SECRET_KEY|" /etc/seaweedfs/s3.json.tpl > /tmp/s3.json
+        && exec weed server -dir=/data -ip.bind=0.0.0.0 -master.volumeSizeLimitMB=1024 -volume.max=0
+        -s3 -s3.port=8333 -s3.config=/tmp/s3.json
     ports:
-      - "127.0.0.1:9000:9000"       # S3 API for local `pnpm dev`
-      - "127.0.0.1:9001:9001"       # admin console, reach it through an SSH tunnel
+      - "127.0.0.1:9000:8333"       # S3 API for local `pnpm dev` (same port MinIO used)
     volumes:
-      - miniodata:/data
+      - ./seaweedfs/s3.json.tpl:/etc/seaweedfs/s3.json.tpl:ro
+      - seaweeddata:/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # the S3 gateway answers 403 (no auth) once it is up; 200/403 both mean ready
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8333/ | grep -Eq '^(200|403)$' || wget -qS -O /dev/null http://127.0.0.1:8333/ 2>&1 | grep -Eq 'HTTP/[0-9.]+ (200|403)'"]
       interval: 10s
       timeout: 5s
       retries: 10
 
-  minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+  s3-init:
+    image: amazon/aws-cli:2.37.7
     depends_on:
-      minio:
+      seaweedfs:
         condition: service_healthy
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
-      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      AWS_DEFAULT_REGION: ${S3_REGION:-ap-northeast-1}
+      AWS_EC2_METADATA_DISABLED: "true"
+      S3_ENDPOINT: http://seaweedfs:8333
     volumes:
-      - ./minio/init.sh:/init.sh:ro
-      - ./minio/app-policy.json:/app-policy.json:ro
+      - ./seaweedfs/init.sh:/init.sh:ro
     entrypoint: ["/bin/sh", "/init.sh"]
 
   migrate:
@@ -140,7 +147,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
@@ -170,7 +177,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
       migrate:
         condition: service_completed_successfully
@@ -192,7 +199,7 @@ services:
     image: ghcr.io/bangdh/rireki-extractor:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
-      S3_ENDPOINT: http://minio:9000
+      S3_ENDPOINT: http://seaweedfs:8333
       S3_REGION: ${S3_REGION:-ap-northeast-1}
       S3_FORCE_PATH_STYLE: "true"
       S3_ACCESS_KEY: ${S3_ACCESS_KEY}
@@ -201,7 +208,7 @@ services:
       EXTRACTOR_WORKERS: ${EXTRACTOR_WORKERS:-2}
       OMP_NUM_THREADS: "2"
     depends_on:
-      minio-init:
+      s3-init:
         condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
@@ -246,7 +253,7 @@ services:
 volumes:
   pgdata:
   redisdata:
-  miniodata:
+  seaweeddata:
   caddy_data:
   caddy_config:
   pgbackups:

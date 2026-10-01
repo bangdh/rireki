@@ -8,13 +8,12 @@ description: How to run the Rireki stack locally (docker compose infra, pnpm dev
 
 ```bash
 cp deploy/.env.example deploy/.env    # edit passwords; APP_DOMAIN=localhost:3000 for dev
-docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile dev up -d postgres redis minio minio-init mailpit
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env --profile dev up -d postgres redis seaweedfs s3-init mailpit
 pnpm install
 pnpm --filter @rireki/db migrate:dev && pnpm --filter @rireki/db seed
 pnpm dev
 ```
-Open `http://saoviet.localhost:3000` (seeded tenant). Mailpit UI: `http://localhost:8025`. MinIO console:
-`http://localhost:9001`. Extractor: `cd apps/extractor && uvicorn main:app --reload` (or the docker profile).
+Open `http://saoviet.localhost:3000` (seeded tenant). Mailpit UI: `http://localhost:8025`. S3: `aws --endpoint-url http://127.0.0.1:9000 s3 ls`. Extractor: `cd apps/extractor && uvicorn main:app --reload` (or the docker profile).
 
 Seed (`packages/db/seed.ts`): tenant `saoviet` (Sao Việt Manpower, prefix SV), admin
 `huong.nguyen@saoviet.vn` / `Rireki-demo-2026`, user `trang.pham@saoviet.vn` / same, the 8 candidates from
@@ -46,7 +45,7 @@ pnpm typecheck && pnpm lint && pnpm test && pnpm build
 pnpm --filter @rireki/web e2e            # needs the stack running; PLAYWRIGHT_BASE_URL=http://saoviet.localhost:3000
 cd apps/extractor && pytest
 ```
-CI (`.github/workflows/ci.yml`) runs the same on every push against Postgres/Redis/MinIO started from
+CI (`.github/workflows/ci.yml`) runs the same on every push against Postgres/Redis/SeaweedFS started from
 `deploy/docker-compose.yml`, then `migrate:deploy` + `seed` and the Playwright e2e against `next start`, and builds
 the three images on `main`.
 
@@ -70,6 +69,6 @@ no horizontal scroll at 400px, keyboard focus visible, dark theme readable.
 ## Troubleshooting
 
 - Subdomain not resolving: use `*.localhost`, not `/etc/hosts`; Safari needs an explicit entry.
-- Presigned PUT fails with CORS: check `MINIO_API_CORS_ALLOW_ORIGIN` and that the URL was signed with
+- Presigned PUT fails with CORS: SeaweedFS replies permissively, so check that the URL was signed with
   `S3_PUBLIC_ENDPOINT`.
 - HLS not playing: manifest segments must be absolute presigned URLs; check TTL and clock skew.

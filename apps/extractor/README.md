@@ -1,6 +1,6 @@
 # Rireki extractor (Python 3.12, FastAPI)
 
-Turns a DOCX / PDF / photo stored in MinIO into Markdown (tables kept), OCR confidence, the cropped ID photo and —
+Turns a DOCX / PDF / photo stored in S3 into Markdown (tables kept), OCR confidence, the cropped ID photo and —
 for the company 履歴書 template — the mapped fields, all locally. Contract and library choices:
 `.claude/skills/cv-extraction/SKILL.md`.
 

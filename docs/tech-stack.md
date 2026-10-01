@@ -1,7 +1,7 @@
 # Rireki — Đề xuất tech stack & đóng gói Docker
 
 > Phạm vi: giai đoạn 1 (miễn phí), một VPS đặt tại Nhật, đóng gói toàn bộ bằng Docker Compose.
-> Ảnh/video/tài liệu lưu trên **MinIO** (S3 API) để sau này chuyển sang AWS S3 (hoặc Wasabi, Cloudflare R2) mà không đổi code.
+> Ảnh/video/tài liệu lưu trên **SeaweedFS** (S3 API, tự host) để sau này chuyển sang AWS S3 (hoặc Wasabi, Cloudflare R2) mà không đổi code.
 
 ## 1. Tóm tắt đề xuất
 
@@ -14,7 +14,7 @@
 | Trích xuất CV | **extractor** (Python: Docling, Tesseract, OpenCV) + **Claude API** (`claude-opus-5-5`, structured outputs) | Text, bảng và ảnh thẻ được tách ở local (mục 5); CV theo mẫu công ty ánh xạ bằng luật không cần LLM; Claude chỉ nhận Markdown ~1–2K token cho CV lạ hoặc text tự do |
 | CSDL | **PostgreSQL 16** | Multi-tenant bằng `tenant_id` trên mọi bảng (+ Row Level Security khi cần), full-text `pg_trgm` cho tìm theo tên/katakana/mã |
 | Cache & hàng đợi | **Redis 7** | Session, rate-limit cổng mật khẩu, hàng đợi BullMQ, đếm lượt xem gần thời gian thực |
-| Object storage | **MinIO** (S3 API) → AWS S3 sau | SDK `@aws-sdk/client-s3`, presigned URL ngắn hạn; đổi endpoint là xong |
+| Object storage | **SeaweedFS** (S3 API, Apache-2.0) → AWS S3 sau | SDK `@aws-sdk/client-s3`, presigned URL ngắn hạn; đổi endpoint là xong. MinIO bị loại: ngừng bản community 10/2025, gỡ image khỏi Docker Hub 09/2026, bản cuối dính CVE-2026-40344 không vá |
 | Reverse proxy / TLS | **Caddy 2** | Tự cấp chứng chỉ Let's Encrypt cho từng subdomain tenant (on-demand TLS), cấu hình 30 dòng |
 | Email | SMTP (SES/SendGrid) qua Nodemailer; dev dùng **Mailpit** | Mời thành viên, link gửi khách, thông báo lượt xem |
 | Giám sát | `pino` log JSON → Grafana Loki (tùy chọn), **Sentry**, healthcheck Docker | Đủ cho 1 VPS; thêm Prometheus khi tải tăng |
@@ -37,23 +37,23 @@ flowchart LR
     Extractor[extractor · Python<br/>Docling · Tesseract · OpenCV]
     PG[(PostgreSQL 16)]
     Redis[(Redis 7)]
-    MinIO[(MinIO · S3 API<br/>originals · media · renders · public)]
+    S3[(SeaweedFS · S3 API<br/>originals · media · renders · public)]
   end
   Claude[Claude API<br/>trích xuất 履歴書]
   SMTP[SMTP]
   Staff --> Caddy
   Client --> Caddy
   Caddy --> Web
-  Caddy -->|s3.rireki.app presigned| MinIO
+  Caddy -->|s3.rireki.app presigned| S3
   Web --> PG
   Web --> Redis
-  Web --> MinIO
+  Web --> S3
   Web -->|job| Redis
   Redis -->|job| Worker
-  Worker --> MinIO
+  Worker --> S3
   Worker --> PG
   Worker --> Extractor
-  Extractor --> MinIO
+  Extractor --> S3
   Worker -->|Markdown| Claude
   Worker --> SMTP
 ```
@@ -66,7 +66,7 @@ flowchart LR
 - Cookie phiên đặt theo từng subdomain (không dùng `Domain=.rireki.app`) để đăng nhập tenant A không hiện ở tenant B. Trang khách `/s/{token}` dùng cookie riêng, hạn ngắn.
 - Mã nhân sự `AZ123456`: unique trên `(tenant_id, code)`; prefix 2 chữ in hoa + bộ đếm 6 chữ số trong bảng `tenants`, cấp trong transaction.
 
-## 4. Lưu trữ MinIO và đường đi của file
+## 4. Lưu trữ S3 (SeaweedFS) và đường đi của file
 
 | Bucket | Nội dung | Quyền | Lifecycle |
 |---|---|---|---|
@@ -76,10 +76,10 @@ flowchart LR
 | `rireki-uploads` | Upload đang dở (multipart) | private | tự xoá sau 1 ngày |
 | `rireki-public` | Logo tenant, ảnh thương hiệu trang khách | public-read | — |
 
-- **Upload**: trình duyệt xin presigned `PUT` (hoặc multipart cho video lớn) từ API → đẩy thẳng lên `s3.rireki.app` (Caddy → MinIO) → API ghi bản ghi `files` → đẩy job vào BullMQ.
+- **Upload**: trình duyệt xin presigned `PUT` (hoặc multipart cho video lớn) từ API → đẩy thẳng lên `s3.rireki.app` (Caddy → SeaweedFS) → API ghi bản ghi `files` → đẩy job vào BullMQ.
 - **Video**: worker tải gốc → `ffmpeg` → HLS 2 mức (720p/480p) + poster, **ghi watermark tĩnh** (mã nhân sự + "Confidential") vào khung hình → ghi `rireki-media`. Khi khách xem: API cấp manifest động, mỗi segment là presigned URL 60 giây gắn với phiên xem; player (`hls.js`) phủ thêm watermark động (tên, email, giờ của người xem). Không có endpoint tải MP4 cho link chỉ xem.
 - **CV**: DOCX → PDF (LibreOffice) → ảnh trang (`pdftoppm`) → `rireki-renders`. Link chỉ xem: API lấy ảnh nền, ghép watermark người xem bằng `sharp` (vài ms), trả về với `Cache-Control: no-store`. Link cho tải: presigned GET 5 phút tới PDF, mỗi lần tải ghi `ViewEvent(download)`.
-- **Chuyển sang AWS S3**: đổi `S3_ENDPOINT`, `S3_REGION`, bỏ `S3_FORCE_PATH_STYLE`; đồng bộ dữ liệu bằng `mc mirror minio/rireki-originals s3/rireki-originals`. Khuyến nghị để MinIO ở chế độ single-node với ổ riêng, bật `mc mirror` định kỳ sang S3 làm backup từ ngày đầu.
+- **Chuyển sang AWS S3**: đổi `S3_ENDPOINT`, `S3_REGION`, bỏ `S3_FORCE_PATH_STYLE`; đồng bộ dữ liệu bằng `rclone sync` giữa hai endpoint. Khuyến nghị để MinIO ở chế độ single-node với ổ riêng, bật `mc mirror` định kỳ sang S3 làm backup từ ngày đầu.
 
 ## 5. Trích xuất 履歴書: tách text và ảnh ở local, LLM chỉ nhận text
 
@@ -139,7 +139,7 @@ Tiền chủ yếu nằm ở token ra (JSON), nên lợi ích lớn nhất của
 
 ### 5.4 Đóng gói
 
-Service `extractor` (Python 3.12, FastAPI) trong Compose, profile `app`: `POST /extract` nhận đường dẫn object trong MinIO, trả `{markdown, pages[], confidence, tables[], photo_key, template_match}`; worker Node gọi qua mạng nội bộ. Image dựng từ `python:3.12-slim` + `tesseract-ocr` và gói ngôn ngữ `jpn vie mya ben ind eng` + `poppler-utils` + `libgl1` (OpenCV) + `docling` (kéo PyTorch CPU, ảnh ~2,5 GB; chạy 2 request song song trên 2 vCPU là đủ cho vài chục CV/giờ). Phiên bản nhẹ không có mô hình layout (pdfplumber + Tesseract + OpenCV, ~600 MB) dùng được khi CV luôn theo mẫu công ty.
+Service `extractor` (Python 3.12, FastAPI) trong Compose, profile `app`: `POST /extract` nhận đường dẫn object trong S3, trả `{markdown, pages[], confidence, tables[], photo_key, template_match}`; worker Node gọi qua mạng nội bộ. Image dựng từ `python:3.12-slim` + `tesseract-ocr` và gói ngôn ngữ `jpn vie mya ben ind eng` + `poppler-utils` + `libgl1` (OpenCV) + `docling` (kéo PyTorch CPU, ảnh ~2,5 GB; chạy 2 request song song trên 2 vCPU là đủ cho vài chục CV/giờ). Phiên bản nhẹ không có mô hình layout (pdfplumber + Tesseract + OpenCV, ~600 MB) dùng được khi CV luôn theo mẫu công ty.
 
 ## 6. Bảo mật & bảo vệ nội dung
 
@@ -147,7 +147,7 @@ Service `extractor` (Python 3.12, FastAPI) trong Compose, profile `app`: `POST /
 - Cổng link khách: token 22 ký tự ngẫu nhiên trong URL; mật khẩu (argon2id); rate-limit theo IP+token bằng Redis; ghi `failed_password`.
 - Mọi URL file là presigned ngắn hạn, gắn `tenant_id` và phiên; không có URL cố định tới file riêng tư.
 - Chế độ chỉ xem: ảnh trang có watermark server-side + lớp phủ client, chặn in/chuột phải/phím tắt, làm mờ khi mất focus (đã mô phỏng trong mockup). Browser không chặn được screenshot của hệ điều hành — nêu rõ trong UI.
-- Audit log (bảng `audit_logs`), backup Postgres hằng đêm (giữ 14 ngày), MinIO mirror sang S3.
+- Audit log (bảng `audit_logs`), backup Postgres hằng đêm (giữ 14 ngày), mirror object store sang S3.
 
 ## 7. Đóng gói Docker
 
@@ -158,8 +158,8 @@ Toàn bộ chạy bằng một file `deploy/docker-compose.yml` (chi tiết tron
 | `caddy` | `caddy:2` | TLS, reverse proxy, phục vụ mockup tĩnh tại `design.{DOMAIN}` | mặc định |
 | `postgres` | `postgres:16-alpine` | CSDL | mặc định |
 | `redis` | `redis:7-alpine` | cache/queue | mặc định |
-| `minio` | `minio/minio` | object storage (console cổng 9001, chỉ bind localhost) | mặc định |
-| `minio-init` | `minio/mc` | tạo bucket, policy, lifecycle, user ứng dụng | mặc định (chạy một lần) |
+| `seaweedfs` | `chrislusf/seaweedfs` | object storage S3 API (cổng 9000 chỉ bind localhost) | mặc định |
+| `s3-init` | `amazon/aws-cli` | tạo bucket, versioning, lifecycle | mặc định (chạy một lần) |
 | `web` | build `apps/web` | Next.js: UI + API routes + Server Actions (cũng trả lời `tls/ask` cho Caddy) | `app` |
 | `worker` | build `apps/worker` | BullMQ + ffmpeg + Playwright/Chromium + sharp, font Noto JP/Myanmar/Bengali | `app` |
 | `extractor` | build `apps/extractor` | Python: Docling, Tesseract (jpn/vie/mya/ben/ind/eng), OpenCV, FastAPI `POST /extract` | `app` |
@@ -173,9 +173,9 @@ Toàn bộ chạy bằng một file `deploy/docker-compose.yml` (chi tiết tron
 
 ## 8. Máy chủ & vận hành
 
-- Khởi điểm: 1 VPS tại Tokyo (AWS Lightsail/EC2, Sakura, ConoHa, Vultr) **4 vCPU · 8 GB RAM · 160 GB SSD**; ổ riêng cho `/srv/minio`. Chuyển mã video là tác vụ nặng nhất: giới hạn worker 2 job song song (`WORKER_CONCURRENCY=2`).
+- Khởi điểm: 1 VPS tại Tokyo (AWS Lightsail/EC2, Sakura, ConoHa, Vultr) **4 vCPU · 8 GB RAM · 160 GB SSD**; ổ riêng cho dữ liệu SeaweedFS. Chuyển mã video là tác vụ nặng nhất: giới hạn worker 2 job song song (`WORKER_CONCURRENCY=2`).
 - Dữ liệu đặt tại Nhật (khách hàng Nhật quan tâm), VN/MM truy cập qua HTTPS bình thường.
-- Khi lớn hơn: tách MinIO sang S3 thật, Postgres sang managed (RDS), thêm worker thứ hai; Compose vẫn giữ nguyên, chỉ đổi `.env`.
+- Khi lớn hơn: tách object store sang S3 thật, Postgres sang managed (RDS), thêm worker thứ hai; Compose vẫn giữ nguyên, chỉ đổi `.env`.
 
 ## 9. Cấu trúc repo đề xuất (monorepo pnpm)
 
@@ -189,7 +189,7 @@ rireki/
 │  ├─ db/         # Prisma schema, migrations, seed, PrismaClient
 │  └─ shared/     # zod schema 履歴書, hằng số, messages/{en,ja,vi,id,my}.json (sinh từ assets/i18n.js)
 ├─ .claude/       # agents/ · skills/ · workflows/build-rireki.js (xem mục 11)
-├─ deploy/        # docker-compose, Caddyfile, Dockerfiles, minio/init.sh
+├─ deploy/        # docker-compose, Caddyfile, Dockerfiles, seaweedfs/init.sh
 ├─ docs/          # tài liệu này
 └─ index.html, app/, public/, viewer/, assets/   # bộ mockup = spec
 ```
@@ -197,7 +197,7 @@ rireki/
 ## 10. Lộ trình triển khai
 
 1. **Tuần 1–2** · Khởi tạo monorepo, Prisma schema (better-auth + candidates/cv Json/videos/documents/share_links/viewers/view_events/audit_logs), better-auth + subdomain, Compose chạy đủ hạ tầng.
-2. **Tuần 3–4** · CRUD nhân sự, form 7 bước, upload MinIO, render 履歴書 (HTML → PDF/ảnh), danh sách + lọc.
+2. **Tuần 3–4** · CRUD nhân sự, form 7 bước, upload S3, render 履歴書 (HTML → PDF/ảnh), danh sách + lọc.
 3. **Tuần 5–6** · Worker video HLS + watermark; extractor (Docling/Tesseract/OpenCV, cắt ảnh thẻ, ánh xạ theo mẫu) + Claude cho CV lạ; màn hình kiểm tra import.
 4. **Tuần 7–8** · Link gửi khách (mật khẩu, định danh, chỉ xem/cho tải, hạn), trang khách, tracking, email thông báo.
 5. **Tuần 9** · Thành viên & vai trò, cài đặt công ty/thương hiệu, audit log, backup, CI/CD, chạy thử với một công ty phái cử.
@@ -209,7 +209,7 @@ Trong `.claude/` có đủ cấu hình để Claude Code tự xây ứng dụng 
 
 | Thành phần | Nội dung |
 |---|---|
-| `CLAUDE.md` | Luật vàng, bảng quyết định (Next.js full-stack, better-auth, Prisma + Json, MinIO, BullMQ, Playwright, Docling, Claude), layout repo, lệnh, Definition of Done, phân vùng path khi chạy song song |
+| `CLAUDE.md` | Luật vàng, bảng quyết định (Next.js full-stack, better-auth, Prisma + Json, SeaweedFS/S3, BullMQ, Playwright, Docling, Claude), layout repo, lệnh, Definition of Done, phân vùng path khi chạy song song |
 | `.claude/agents/` | 7 subagent: `planner` (viết spec, chỉ đọc), `fullstack-dev` (Next.js + Prisma), `worker-dev` (BullMQ/ffmpeg/Playwright), `extractor-dev` (Python), `devops` (scaffold, Docker, CI, tích hợp), `reviewer` (một lăng kính mỗi lần), `qa` (Vitest + Playwright e2e, 5 ngôn ngữ, 400px) |
 | `.claude/skills/` | 10 skill: `rireki-conventions`, `rirekisho-schema` (zod + Prisma, nguồn sự thật), `mockup-to-nextjs`, `tenant-auth`, `storage-minio`, `media-pipeline`, `share-links-protection`, `cv-extraction`, `run-and-verify`, `review-checklist` |
 | `.claude/workflows/build-rireki.js` | Script điều phối 5 pha: **Scaffold** (1 devops) → **Foundation** (3 lane song song: db · ui tĩnh · extractor, rồi tích hợp) → **Features** (pipeline 5 tính năng: spec → code → 3 lăng kính review → fix; lane theo path riêng) → **Integration & QA** (tối đa 3 vòng tích hợp + QA + fix) → **Review** (4 lăng kính toàn repo, xác minh đối kháng, fix, QA cuối) |

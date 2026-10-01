@@ -33,7 +33,7 @@ spec: `index.html` (sitemap, roles, flows, data model), the mockups in `app/`, `
 | Tenant | subdomain `{slug}.{DOMAIN}` resolved in `middleware.ts` → header `x-tenant`; every DB query filters by `tenantId` |
 | Database | PostgreSQL 16 + Prisma in `packages/db` (schema, migrations, seed). CV body = `Json` validated by zod schema in `packages/shared` |
 | Validation | `zod` everywhere; the 履歴書 schema lives once in `packages/shared/src/cv.ts` |
-| Files | MinIO/S3 via `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`; browser uploads with presigned PUT; keys `tenants/{tenantId}/candidates/{candidateId}/{kind}/{file}` |
+| Files | S3 API (self-hosted SeaweedFS in compose, AWS S3 later) via `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`; browser uploads with presigned PUT; keys `tenants/{tenantId}/candidates/{candidateId}/{kind}/{file}` |
 | Queue | BullMQ on Redis; worker = `apps/worker` (plain Node, same Prisma client) |
 | Video | `ffmpeg` CLI → HLS 720p + poster, static watermark (candidate code) via drawtext; player `hls.js` |
 | CV render | Next.js print route `/print/candidates/{id}` (same React component) → worker screenshots pages with Playwright (Chromium) → PNG in `rireki-renders`; per-viewer watermark composited with `sharp` at request time |
@@ -60,7 +60,7 @@ deploy/           docker compose, Caddyfile, Dockerfiles
 
 ```bash
 pnpm install
-docker compose -f deploy/docker-compose.yml --profile dev up -d postgres redis minio minio-init mailpit
+docker compose -f deploy/docker-compose.yml --profile dev up -d postgres redis seaweedfs s3-init mailpit
 pnpm --filter @rireki/db migrate:dev && pnpm --filter @rireki/db seed
 pnpm dev                      # web on :3000, worker, extractor (uvicorn :8000)
 pnpm typecheck && pnpm lint && pnpm test

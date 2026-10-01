@@ -337,16 +337,16 @@
 
   <!-- TECH STACK -->
   <section class="doc-section" id="stack">
-    <h2>Tech stack & triển khai <span class="jp">Docker Compose · MinIO</span></h2>
-    <p class="lead">Toàn bộ TypeScript (Next.js full-stack · BullMQ), better-auth, Prisma, PostgreSQL, Redis, MinIO (S3 API, sau này đổi sang AWS S3 chỉ bằng biến môi trường), Caddy cấp TLS tự động cho từng subdomain tenant, Claude API trích xuất 履歴書. Đóng gói bằng một file <code>deploy/docker-compose.yml</code>. Chi tiết và lý do chọn: <a href="https://github.com/bangdh/rireki/blob/main/docs/tech-stack.md">docs/tech-stack.md</a> · cách chạy: <a href="https://github.com/bangdh/rireki/tree/main/deploy">deploy/README.md</a>.</p>
+    <h2>Tech stack & triển khai <span class="jp">Docker Compose · SeaweedFS</span></h2>
+    <p class="lead">Toàn bộ TypeScript (Next.js full-stack · BullMQ), better-auth, Prisma, PostgreSQL, Redis, SeaweedFS (S3 API tự host, sau này đổi sang AWS S3 chỉ bằng biến môi trường), Caddy cấp TLS tự động cho từng subdomain tenant, Claude API trích xuất 履歴書. Đóng gói bằng một file <code>deploy/docker-compose.yml</code>. Chi tiết và lý do chọn: <a href="https://github.com/bangdh/rireki/blob/main/docs/tech-stack.md">docs/tech-stack.md</a> · cách chạy: <a href="https://github.com/bangdh/rireki/tree/main/deploy">deploy/README.md</a>.</p>
     <div class="flow">
       <div class="box"><span class="who">Edge</span><b>Caddy 2</b>TLS on-demand cho *.rireki.app · reverse proxy · phục vụ mockup tĩnh</div><span class="arrow">→</span>
       <div class="box"><span class="who">App</span><b>web · Next.js full-stack</b>UI + Route Handlers + Server Actions · better-auth · Prisma · i18n 5 ngôn ngữ · hls.js · presigned URL</div><span class="arrow">→</span>
-      <div class="box alt"><span class="who">Data</span><b>PostgreSQL 16 · Redis 7 · MinIO</b>tenant_id trên mọi bảng · session/queue · 5 bucket private</div><span class="arrow">→</span>
+      <div class="box alt"><span class="who">Data</span><b>PostgreSQL 16 · Redis 7 · SeaweedFS (S3)</b>tenant_id trên mọi bảng · session/queue · 5 bucket private</div><span class="arrow">→</span>
       <div class="box"><span class="who">Jobs</span><b>worker · BullMQ + extractor · Python</b>ffmpeg → HLS + watermark · Docling/Tesseract/OpenCV tách text, bảng và ảnh thẻ ở local · CV theo mẫu ánh xạ bằng luật · Claude API (claude-opus-5-5) chỉ nhận Markdown ~1–2K token khi cần · email</div>
     </div>
     <div class="two mt-16">
-      <div class="card"><div class="card-header"><h3>Bucket MinIO</h3></div><div class="table-wrap"><table class="table">
+      <div class="card"><div class="card-header"><h3>Bucket S3 (SeaweedFS)</h3></div><div class="table-wrap"><table class="table">
         <thead><tr><th>Bucket</th><th>Nội dung</th><th>Quyền · lifecycle</th></tr></thead>
         <tbody>
           <tr><td class="mono">rireki-originals</td><td>CV/ảnh/video gốc, hộ chiếu, chứng chỉ</td><td>private, versioning</td></tr>
@@ -356,10 +356,10 @@
           <tr><td class="mono">rireki-public</td><td>logo tenant</td><td>public-read</td></tr>
         </tbody></table></div></div>
       <div class="card"><div class="card-header"><h3>Compose profiles</h3></div><div class="card-body"><ul class="note-list">
-        <li><code>docker compose up -d</code> — Caddy, Postgres, Redis, MinIO + job tạo bucket; chạy được ngay, phục vụ mockup tại <code>design.&lt;domain&gt;</code>.</li>
+        <li><code>docker compose up -d</code> — Caddy, Postgres, Redis, SeaweedFS + job tạo bucket; chạy được ngay, phục vụ mockup tại <code>design.&lt;domain&gt;</code>.</li>
         <li><code>--profile app</code> — thêm web / api / worker (build từ <code>apps/</code> khi có mã nguồn).</li>
         <li><code>--profile dev</code> — Mailpit (SMTP giả). <code>--profile prod</code> — backup Postgres hằng đêm, giữ 14 ngày.</li>
-        <li>Máy chủ khởi điểm: 1 VPS Tokyo 4 vCPU · 8 GB · 160 GB SSD; khi lớn: chuyển MinIO → S3, Postgres → managed, thêm worker.</li>
+        <li>Máy chủ khởi điểm: 1 VPS Tokyo 4 vCPU · 8 GB · 160 GB SSD; khi lớn: chuyển SeaweedFS → S3, Postgres → managed, thêm worker.</li>
       </ul></div></div>
     </div>
     <h3>Agent & skill để code ứng dụng</h3>

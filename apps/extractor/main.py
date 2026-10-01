@@ -1,4 +1,4 @@
-"""Rireki extractor: POST /extract turns a DOCX / PDF / photo stored in MinIO into Markdown (tables kept), OCR
+"""Rireki extractor: POST /extract turns a DOCX / PDF / photo stored in S3 into Markdown (tables kept), OCR
 confidence, the cropped ID photo and — for the company 履歴書 template — the mapped fields. Contract:
 .claude/skills/cv-extraction/SKILL.md."""
 from __future__ import annotations

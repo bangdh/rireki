@@ -10,7 +10,7 @@ Goal: text, tables and the ID photo are extracted **locally**; the LLM only sees
 
 `POST /extract` JSON `{ "bucket": "rireki-originals", "key": "tenants/…/cv/x.pdf", "langs": "jpn+eng", "photo_bucket": "rireki-originals", "photo_key": "tenants/…/photo/auto.jpg" }`
 → `200 { "markdown": "...", "pages": 3, "text_layer": true, "ocr_used": false, "confidence": 0.97, "page_confidence": [0.98,0.97,0.96], "tables": 6, "photo_key": "…" | null, "template_match": true, "fields": { "nameKana": "…", … } | null, "timing_ms": 4200 }`
-`GET /health` → `{ "ok": true }`. Errors: 422 unsupported type, 500 with message. Reads/writes MinIO with `boto3`.
+`GET /health` → `{ "ok": true }`. Errors: 422 unsupported type, 500 with message. Reads/writes S3 with `boto3`.
 
 Stack (all permissive licenses): `docling` (DOCX/PDF/images → DoclingDocument → `export_to_markdown()`, tables
 kept; `PdfPipelineOptions(do_ocr=…, do_table_structure=True, generate_picture_images=True)`;

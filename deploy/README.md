@@ -17,9 +17,9 @@ docker compose up -d
 docker compose ps
 ```
 
-Starts Caddy, PostgreSQL, Redis, MinIO and the one-shot `minio-init` job (buckets, lifecycle rules,
+Starts Caddy, PostgreSQL, Redis, SeaweedFS (S3) and the one-shot `s3-init` job (buckets, lifecycle rules,
 application user). Caddy already serves the design mockups at `https://design.<DOMAIN>/`.
-MinIO console: `ssh -L 9001:localhost:9001 <vps>` then open http://localhost:9001.
+No admin console: inspect buckets with `aws --endpoint-url http://127.0.0.1:9000 s3 ls` (or rclone) on the VPS.
 
 ## 3. Full application (once `apps/web`, `apps/worker`, `apps/extractor` exist)
 
@@ -41,9 +41,9 @@ Images are tagged `ghcr.io/bangdh/rireki-{web,worker,extractor}:${IMAGE_TAG}` (b
 | Logs | `docker compose logs -f web worker` |
 | Database shell | `docker compose exec postgres psql -U $POSTGRES_USER $POSTGRES_DB` |
 | Manual backup | `docker compose exec postgres pg_dump -U $POSTGRES_USER $POSTGRES_DB \| gzip > backup.sql.gz` |
-| Mirror MinIO to AWS S3 | `mc alias set s3 https://s3.ap-northeast-1.amazonaws.com <key> <secret> && mc mirror --watch local/rireki-originals s3/rireki-originals` |
+| Mirror to AWS S3 | `rclone sync seaweedfs:rireki-originals s3:rireki-originals` (rclone remotes for both endpoints) |
 | Move to AWS S3 for good | set `S3_ENDPOINT`/`S3_PUBLIC_ENDPOINT` to the AWS endpoint, `S3_FORCE_PATH_STYLE=false`, restart `web` and `worker` |
-| Rotate app S3 credentials | change `S3_ACCESS_KEY`/`S3_SECRET_KEY` in `.env`, `docker compose up -d minio-init web worker` |
+| Rotate app S3 credentials | change `S3_ACCESS_KEY`/`S3_SECRET_KEY` in `.env`, `docker compose up -d --force-recreate seaweedfs s3-init web worker` |
 
 ## 5. Buckets
 
@@ -55,4 +55,4 @@ Images are tagged `ghcr.io/bangdh/rireki-{web,worker,extractor}:${IMAGE_TAG}` (b
 | `rireki-uploads` (in-progress uploads) | private | expire after 1 day |
 | `rireki-public` (tenant logos) | public read | kept |
 
-Browsers never talk to MinIO directly except through short-lived presigned URLs on `s3.<DOMAIN>`.
+Browsers never talk to the object store directly except through short-lived presigned URLs on `s3.<DOMAIN>`.
