@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+!.env.example
+.next
+dist
+packages/db/generated
+apps/web/next-env.d.ts
+*.tsbuildinfo
+coverage
+test-results
+playwright-report
+.venv
+__pycache__
+.pytest_cache
+.DS_Store

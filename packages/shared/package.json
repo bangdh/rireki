@@ -1,0 +1,24 @@
+{
+  "name": "@rireki/shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./messages/*": "./messages/*.json"
+  },
+  "scripts": {
+    "gen:messages": "node scripts/gen-messages.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1144.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.3"
+  }
+}

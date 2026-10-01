@@ -1,0 +1,10 @@
+{
+  "name": "@rireki/extractor",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "setup": "uv venv --python 3.12 .venv && uv pip install -p .venv -r requirements-dev.txt",
+    "dev": ".venv/bin/uvicorn main:app --reload --port 8000",
+    "test": ".venv/bin/pytest -q"
+  }
+}

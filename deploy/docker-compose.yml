@@ -53,6 +53,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:5432:5432"       # local `pnpm dev` / migrations
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -65,6 +67,8 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "127.0.0.1:6379:6379"       # local `pnpm dev`
     volumes:
       - redisdata:/data
     healthcheck:
@@ -83,6 +87,7 @@ services:
       MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
       MINIO_API_CORS_ALLOW_ORIGIN: https://*.${DOMAIN},https://${DOMAIN}
     ports:
+      - "127.0.0.1:9000:9000"       # S3 API for local `pnpm dev`
       - "127.0.0.1:9001:9001"       # admin console, reach it through an SSH tunnel
     volumes:
       - miniodata:/data
@@ -107,11 +112,23 @@ services:
       - ./minio/app-policy.json:/app-policy.json:ro
     entrypoint: ["/bin/sh", "/init.sh"]
 
+  migrate:
+    profiles: ["app"]
+    image: ghcr.io/bangdh/rireki-worker:${IMAGE_TAG:-latest}
+    environment:
+      <<: *app-env
+    working_dir: /app/node_modules/@rireki/db
+    command: ["/app/node_modules/.bin/prisma", "migrate", "deploy"]
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   web:
     profiles: ["app"]
     build:
-      context: ../apps/web
-      dockerfile: ../../deploy/dockerfiles/web.Dockerfile
+      context: ..
+      dockerfile: deploy/dockerfiles/web.Dockerfile
     image: ghcr.io/bangdh/rireki-web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
@@ -125,6 +142,8 @@ services:
         condition: service_healthy
       minio-init:
         condition: service_completed_successfully
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
       interval: 15s
@@ -134,8 +153,8 @@ services:
   worker:
     profiles: ["app"]
     build:
-      context: ../apps/worker
-      dockerfile: ../../deploy/dockerfiles/worker.Dockerfile
+      context: ..
+      dockerfile: deploy/dockerfiles/worker.Dockerfile
     image: ghcr.io/bangdh/rireki-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
     environment:
@@ -152,6 +171,8 @@ services:
       redis:
         condition: service_healthy
       minio-init:
+        condition: service_completed_successfully
+      migrate:
         condition: service_completed_successfully
       extractor:
         condition: service_healthy

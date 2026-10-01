@@ -1,0 +1,11 @@
+// Models come from .claude/skills/rirekisho-schema/SKILL.md (foundation DB lane).
+// The datasource URL lives in prisma.config.ts.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
