@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   output: "standalone",
   outputFileTracingRoot: path.join(__dirname, "../../"),
   transpilePackages: ["@rireki/db", "@rireki/shared"],
+  // forbidden() in lib/tenant.ts → app/forbidden.tsx with HTTP 403
+  experimental: { authInterrupts: true },
 };
 
 // next-intl without i18n routing: the locale comes from ./i18n/request.ts (cookie set by <LangSwitch/>).

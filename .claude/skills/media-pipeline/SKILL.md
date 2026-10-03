@@ -11,9 +11,9 @@ One queue `rireki` with named jobs; worker concurrency from `WORKER_CONCURRENCY`
 | Job | Payload | Effect |
 |---|---|---|
 | `media.transcode` | `{ tenantId, videoId }` | original → HLS + poster in `rireki-media`; `Video.status`, `durationSec` |
-| `render.pages` | `{ tenantId, candidateId, version }` | print route → PNG per page in `rireki-renders`; `Render` rows |
+| `render.pages` | `{ tenantId, candidateId, version, hide? }` | print route → PDF + PNG per page in `rireki-renders` (full + default variant, or the `hide` variant); `Render` rows |
 | `extract.cv` | `{ tenantId, importJobId }` | extractor → template mapping → optional Claude → `ImportJob.extracted` |
-| `mail.send` | `{ to, template, data }` | nodemailer |
+| `mail.send` | `{ to, subject, text, html? }` | nodemailer; the web renders the mail in the tenant's language (apps/web/lib/shares/mail.ts) |
 
 Enqueue from web with `new Queue("rireki", { connection })`. Jobs are idempotent: check current status first,
 write outputs under deterministic keys, overwrite.
@@ -35,17 +35,20 @@ Phase 2 might add 480p and per-viewer forensic watermarks; not now.
 ## Serving HLS to a viewer (apps/web/app/api/s/[token]/stream/[videoId]/…)
 
 - `index.m3u8`: read the manifest from S3 and rewrite each segment line to a presigned GET URL (60 s TTL)
-  on `S3_PUBLIC_ENDPOINT`; check the viewer cookie/link validity first; log `play_video` once per play.
+  on `S3_PUBLIC_ENDPOINT`; check the viewer session first (`requireViewerApi`, lib/shares/viewer.ts). The player logs
+  `play_video` through /api/s/[token]/events; the manifest route logs nothing (hls.js re-fetches it on mount and recovery).
 - Player: `hls.js` in a client component with `controlsList="nodownload"`, `disablePictureInPicture`, and the
   dynamic `Watermark` overlay (viewer name · email · time).
 
 ## 履歴書 pages → PNG (worker job `render.pages`)
 
-- Print route `GET /print/candidates/{id}?v={version}&key={RENDER_SECRET}`: server component rendering the same
+- Print route `GET /print/candidates/{id}?v={version}&hide=contact,family,health,photo` with the header `x-render-key:
+  {RENDER_SECRET}` from an internal address (never a query string): server component rendering the same
   `<Rirekisho>` React component as the detail page, A4 CSS (`@page { size: A4; margin: 12mm }`), one `<section
   class="page">` per page, no shell.
 - Worker: `chromium.launch()` → `page.goto(url)` → for each `section.page` → `locator.screenshot({ type: "png" })`
-  at `deviceScaleFactor: 2` → upload `page-{n}.png`. Re-render when `Candidate.updatedAt` changes (version =
+  at `deviceScaleFactor: 2` → upload `page-{n}{variant}.png` (`variant` = the hidden blocks, e.g. `.contact`; a job renders
+  the full pages and the default variant, or the one `hide` asks for). Re-render when `Candidate.updatedAt` changes (version =
   updatedAt epoch seconds).
 
 ## Per-viewer watermark (apps/web/app/api/s/[token]/cv/[candidateId]/[page]/route.ts)
@@ -57,7 +60,7 @@ const svg = Buffer.from(watermarkSvg(text, width, height)); // repeated rotated 
 const png = await sharp(base).composite([{ input: svg }]).png().toBuffer();
 return new Response(png, { headers: { "Content-Type": "image/png", "Cache-Control": "no-store" } });
 ```
-Log `open_cv` on page 1 with the viewer and candidate. Downloads of the PDF only when `downloadAllowed`
+The viewer detail page logs `open_cv` (the route logs only `download`). Downloads of the PDF only when `downloadAllowed`
 (see storage-minio).
 
 ## Dockerfile notes

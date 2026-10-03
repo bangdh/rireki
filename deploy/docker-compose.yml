@@ -141,7 +141,7 @@ services:
     environment:
       <<: *app-env
       PORT: "3000"
-      RENDER_SECRET: ${RENDER_SECRET}
+      RENDER_SECRET: ${RENDER_SECRET:?RENDER_SECRET must be set in deploy/.env (32+ random chars)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,7 +168,7 @@ services:
       <<: *app-env
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       WEB_INTERNAL_URL: http://web:3000
-      RENDER_SECRET: ${RENDER_SECRET}
+      RENDER_SECRET: ${RENDER_SECRET:?RENDER_SECRET must be set in deploy/.env (32+ random chars)}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
       EXTRACTOR_URL: http://extractor:8000

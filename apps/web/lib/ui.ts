@@ -10,6 +10,7 @@ export const STATUS_BADGE = {
   interviewing: "badge badge-warning badge-dot",
   selected: "badge badge-dot",
   departed: "badge badge-dot",
+  archived: "badge badge-dot",
 } as const;
 
 export const LINK_STATUS_BADGE = {

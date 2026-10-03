@@ -6,6 +6,7 @@ import { Menu } from "../Menu";
 import { ThemeToggle } from "../ThemeToggle";
 import { NavToggle } from "./NavToggle";
 import type { ShellData } from "./Sidebar";
+import { SignOutButton } from "./SignOutButton";
 
 export async function Topbar({ user }: Pick<ShellData, "user">) {
   const t = await getTranslations();
@@ -34,8 +35,7 @@ export async function Topbar({ user }: Pick<ShellData, "user">) {
           <a href="#"><Icon name="user" /><span>{t("nav.profile")}</span></a>
           <Link href="/settings/company"><Icon name="settings" /><span>{t("nav.settings")}</span></Link>
           <hr />
-          {/* TODO(auth-tenant): sign-out Server Action (better-auth signOut) instead of a link */}
-          <Link href="/login"><Icon name="logout" /><span>{t("nav.logout")}</span></Link>
+          <SignOutButton><Icon name="logout" /><span>{t("nav.logout")}</span></SignOutButton>
         </div>
       </Menu>
     </header>

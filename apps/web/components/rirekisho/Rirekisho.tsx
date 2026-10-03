@@ -1,6 +1,6 @@
 import React from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { Cv } from "@rireki/shared";
+import type { CvDraft } from "@rireki/shared";
 import { COUNTRY_JA } from "@/lib/ui";
 
 const SITUATION_JA = { job_hunting: "就職活動中", in_training: "研修中", employed: "在職中", offer: "内定" } as const;
@@ -8,14 +8,15 @@ const HIDDEN = <span className="hidden-note">送出機関の設定により非�
 
 /** "2024-03" → ["2024", "3"] */
 const ym = (s?: string): [string, string] => (s ? [s.slice(0, 4), String(Number(s.slice(5, 7)))] : ["", ""]);
-/** "2002-03-15" → "2002年3月15日" */
-export const dateJa = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y}年${m}月${d}日`;
+/** "2002-03-15" → "2002年3月15日"; an empty or malformed date (draft) renders as "". */
+export const dateJa = (iso?: string) => {
+  const [y, m, d] = (iso ?? "").split("-").map(Number);
+  return y && m && d ? `${y}年${m}月${d}日` : "";
 };
-/** Full years between dob and asOf. */
-export function ageAt(dob: string, asOf: Date) {
-  const [y, m, d] = dob.split("-").map(Number);
+/** Full years between dob and asOf; null when dob is missing (draft). */
+export function ageAt(dob: string | undefined, asOf: Date): number | null {
+  const [y, m, d] = (dob ?? "").split("-").map(Number);
+  if (!y || !m || !d) return null;
   let age = asOf.getFullYear() - y;
   if (asOf.getMonth() + 1 < m || (asOf.getMonth() + 1 === m && asOf.getDate() < d)) age--;
   return age;
@@ -48,7 +49,7 @@ function LangScale({ value, label, note }: { value: number; label: string; note:
 }
 
 type Props = {
-  cv: Cv; // the Json body validated by CvSchema (packages/shared/src/cv.ts)
+  cv: CvDraft; // the Json body validated by CvSchema (packages/shared/src/cv.ts); a draft may still miss fields
   /** date printed as 「現在」 and used for the age (the candidate's updatedAt) */
   asOf: Date;
   photoUrl?: string;
@@ -61,6 +62,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
   const asOfIso = asOf.toISOString().slice(0, 10);
   const contact = (value?: string) => (hideContact ? HIDDEN : value);
   const unit = (v: number | undefined, u: string) => (v === undefined ? "—" : `${v} ${u}`);
+  const age = ageAt(cv.dob, asOf);
   return (
     <article className="rirekisho" lang="ja">
       <div className="doc-title">
@@ -73,7 +75,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
             <th>家族構成</th>
             <td>{cv.familyCount !== undefined && `家族：${cv.familyCount}人`}{cv.familyDetail && `（${cv.familyDetail}）`}</td>
             <th>状況</th>
-            <td>{SITUATION_JA[cv.situation]}</td>
+            <td>{SITUATION_JA[cv.situation ?? "job_hunting"]}</td>
           </tr>
         </tbody>
       </table>
@@ -98,12 +100,12 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
           <tr>
             <th>生年月日</th>
             <td>{dateJa(cv.dob)}</td>
-            <td className="c">{ageAt(cv.dob, asOf)}歳</td>
-            <td>性別　{cv.gender === "male" ? "男" : "女"}</td>
+            <td className="c">{age === null ? "" : `${age}歳`}</td>
+            <td>性別　{cv.gender === "male" ? "男" : cv.gender === "female" ? "女" : ""}</td>
           </tr>
           <tr>
             <th>国籍</th>
-            <td>{COUNTRY_JA[cv.nationality]}</td>
+            <td>{cv.nationality ? COUNTRY_JA[cv.nationality] : ""}</td>
             <th>携帯電話番号</th>
             <td>{contact(cv.mobile)}</td>
           </tr>
@@ -125,7 +127,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }}>学歴</th><th>入学・卒業</th></tr>
-          {cv.education.map((e, i) => (
+          {(cv.education ?? []).map((e, i) => (
             <React.Fragment key={i}>
               <Row date={e.from} text={e.school} kind="入学" />
               {e.to && <Row date={e.to} text={e.school} kind="卒業" />}
@@ -137,7 +139,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }}>職歴</th><th>入社・退職</th></tr>
-          {cv.work.map((w, i) => (
+          {(cv.work ?? []).map((w, i) => (
             <React.Fragment key={i}>
               <Row date={w.from} text={w.employer} kind="入社" />
               {w.to && <Row date={w.to} text={w.employer} kind="退職" />}
@@ -163,7 +165,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }} colSpan={2}>免許・資格</th></tr>
-          {cv.licenses.map((l, i) => (
+          {(cv.licenses ?? []).map((l, i) => (
             <Row key={i} date={l.date} text={l.issuer ? `${l.name}（${l.issuer}）` : l.name} />
           ))}
         </tbody>

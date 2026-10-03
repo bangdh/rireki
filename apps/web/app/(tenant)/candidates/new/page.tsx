@@ -1,18 +1,26 @@
+import { prisma } from "@rireki/db";
+import { formatCandidateCode } from "@rireki/shared";
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 import { Icon } from "@/components/Icon";
 import { Table } from "@/components/Table";
-import { TENANT } from "@/lib/sample";
+import { recentImports, userNames } from "@/lib/candidates/queries";
+import { When } from "@/lib/candidates/When";
+import { requireMember } from "@/lib/tenant";
 
-// app/candidate-new.html — choose how to add a candidate. TODO(import): "Upload a CV file" opens the upload step; recent imports from ImportJob.
-const RECENT_IMPORTS = [
-  { file: "CV_Su_Su_Hlaing.pdf", by: "Aung Myat", status: "needs_review", when: "09:31", day: "today", href: "/candidates/import/demo" },
-  { file: "Rahim_Uddin_CV_2026.docx", by: "Lê Văn Tùng", status: "needs_review", when: "17:50", day: "yesterday", href: "/candidates/import/demo" },
-  { file: "SoYeuLyLich_PhamMinhDuc.pdf", by: "Lê Văn Tùng", status: "saved", when: "17:42", day: "yesterday", href: "/candidates/SV000215" },
-] as const;
-
+// app/candidate-new.html — choose how to add a candidate; the import routes belong to the import lane (/candidates/import).
 export default async function CandidateNewPage() {
-  const t = await getTranslations();
+  const { tenant } = await requireMember();
+  const [t, imports] = await Promise.all([getTranslations(), recentImports(tenant.id)]);
+  const savedIds = imports.map((i) => i.candidateId).filter((id): id is string => !!id);
+  const [names, saved] = await Promise.all([
+    userNames(imports.map((i) => i.createdById)),
+    savedIds.length ? prisma.candidate.findMany({ where: { tenantId: tenant.id, id: { in: savedIds } }, select: { id: true, code: true } }) : [],
+  ]);
+  const nextCode = formatCandidateCode(tenant.settings.codePrefix, tenant.settings.nextCode);
+  // import.saved embeds a sample code ("Saved as SV000215", "SV000215 として登録済み"): swap it for the real one so each language keeps its word order.
+  // TODO(phase2): ICU placeholder in assets/i18n.js ("Saved as {code}") and t("import.saved", { code }).
+  const savedAs = (code?: string) => t("import.saved").replace(/[A-Z]{2}\d{6}/, code ?? "");
   return (
     <main className="main" id="main">
       <div className="crumbs"><Link href="/candidates">{t("cand.title")}</Link><span>/</span><span>{t("cand.add")}</span></div>
@@ -23,7 +31,7 @@ export default async function CandidateNewPage() {
         </div>
       </div>
       <div className="grid grid-3">
-        <Link className="option-card" href="/candidates/import/demo">
+        <Link className="option-card" href="/candidates/import">
           <span className="badge badge-primary recommended">{t("common.recommended")}</span>
           <div className="icon-box"><Icon name="upload" className="ic-lg" /></div>
           <h3>{t("candnew.upload_t")}</h3>
@@ -36,7 +44,8 @@ export default async function CandidateNewPage() {
           <p className="muted">{t("candnew.form_d")}</p>
           <span className="small faint">{t("candnew.form_time")}</span>
         </Link>
-        <a className="option-card" href="#">
+        {/* TODO(phase2): bulk import (ZIP / XLSX / CSV) */}
+        <a className="option-card" href="#" aria-disabled="true" style={{ opacity: 0.6, pointerEvents: "none" }}>
           <span className="badge recommended">{t("common.beta")}</span>
           <div className="icon-box"><Icon name="layers" className="ic-lg" /></div>
           <h3>{t("candnew.bulk_t")}</h3>
@@ -46,41 +55,52 @@ export default async function CandidateNewPage() {
       </div>
       <div className="callout mt-24">
         <Icon name="info" />
-        <div><b>{t("candnew.code_t")}</b><br /><span>{t("candnew.code_d")}</span> <code>{TENANT.nextCode}</code>. <span>{t("candnew.code_d2")}</span></div>
+        <div><b>{t("candnew.code_t")}</b><br /><span>{t("candnew.code_d")}</span> <code>{nextCode}</code>. <span>{t("candnew.code_d2")}</span></div>
       </div>
       <section className="card mt-24">
         <div className="card-header">
           <h3>{t("candnew.recent")}</h3>
-          <Link className="btn btn-sm btn-ghost" href="/candidates/import/demo">{t("common.view_all")}</Link>
+          <Link className="btn btn-sm btn-ghost" href="/candidates/import">{t("common.view_all")}</Link>
         </div>
-        <div className="table-wrap">
-          <Table className="table">
-            <thead>
-              <tr>
-                <th>{t("common.file")}</th>
-                <th>{t("common.uploaded_by")}</th>
-                <th>{t("common.status")}</th>
-                <th>{t("common.time")}</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {RECENT_IMPORTS.map((r) => (
-                <tr key={r.file}>
-                  <td className="row-nowrap"><Icon name="file" className="muted" /><span>{r.file}</span></td>
-                  <td>{r.by}</td>
-                  <td>
-                    {r.status === "saved" ? <span className="badge badge-success">{t("import.saved")}</span> : <span className="badge badge-warning">{t("import.needs_review")}</span>}
-                  </td>
-                  <td className="small muted">{r.when} <span>{t(`common.${r.day}`)}</span></td>
-                  <td className="right">
-                    <Link className={r.status === "saved" ? "btn btn-sm btn-ghost" : "btn btn-sm"} href={r.href}>{t(r.status === "saved" ? "common.open" : "import.review")}</Link>
-                  </td>
+        {imports.length === 0 ? (
+          <div className="empty"><Icon name="sparkles" /><span>{t("common.none")}</span></div>
+        ) : (
+          <div className="table-wrap">
+            <Table className="table">
+              <thead>
+                <tr>
+                  <th>{t("common.file")}</th>
+                  <th>{t("common.uploaded_by")}</th>
+                  <th>{t("common.status")}</th>
+                  <th>{t("common.time")}</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </Table>
-        </div>
+              </thead>
+              <tbody>
+                {imports.map((job) => {
+                  const code = saved.find((c) => c.id === job.candidateId)?.code;
+                  return (
+                    <tr key={job.id}>
+                      <td className="row-nowrap"><Icon name="file" className="muted" /><span>{job.fileName}</span></td>
+                      <td>{names.get(job.createdById)}</td>
+                      <td>
+                        {job.candidateId ? <span className="badge badge-success">{savedAs(code)}</span> : <span className="badge badge-warning">{t("import.needs_review")}</span>}
+                      </td>
+                      <td className="small muted"><When date={job.createdAt} /></td>
+                      <td className="right">
+                        {job.candidateId ? (
+                          <Link className="btn btn-sm btn-ghost" href={`/candidates/${job.candidateId}`}>{t("common.open")}</Link>
+                        ) : (
+                          <Link className="btn btn-sm" href={`/candidates/import/${job.id}`}>{t("import.review")}</Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </Table>
+          </div>
+        )}
       </section>
     </main>
   );

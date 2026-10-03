@@ -11,3 +11,9 @@ test("ageAt counts full years (the mockup: born 2002-03-15 is 24 on 2026-09-28)"
   expect(ageAt("2002-03-15", new Date("2026-03-14"))).toBe(23);
   expect(ageAt("2002-03-15", new Date("2026-03-15"))).toBe(24);
 });
+
+test("drafts without a date of birth render blanks instead of NaN", () => {
+  expect(dateJa("")).toBe("");
+  expect(dateJa(undefined)).toBe("");
+  expect(ageAt(undefined, new Date("2026-09-28"))).toBeNull();
+});
