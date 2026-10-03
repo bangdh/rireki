@@ -1,7 +1,6 @@
 import { DEFAULT_LOCALE, LOCALES, type Locale } from "@rireki/shared";
 import { getRequestConfig } from "next-intl/server";
 import { cookies } from "next/headers";
-import { getTenant, tenantSlug } from "@/lib/tenant";
 import { LOCALE_COOKIE } from "./config";
 import { MESSAGES } from "./messages";
 
@@ -14,6 +13,10 @@ export default getRequestConfig(async ({ requestLocale }) => {
   const locale = isLocale(requested) ? requested : DEFAULT_LOCALE;
   // Dates and times (f.dateTime, <When>, the client useFormatter, the 履歴書 date) in the tenant's zone from the Company tab;
   // off a tenant host the server's. getTenant() is cached per request; an unknown subdomain 404s in the page, not here.
+  // Imported here, not at the top: lib/tenant pulls in Prisma (top-level await), and a static import makes this config —
+  // and with it next-intl/server — an async module that Turbopack's production build hands to pages unawaited
+  // ("getTranslations is not a function" under next start).
+  const { getTenant, tenantSlug } = await import("@/lib/tenant");
   const timeZone = (await tenantSlug()) ? await getTenant().then((t) => t.meta.timezone, () => undefined) : undefined;
   return { locale, messages: MESSAGES[locale], timeZone };
 });
