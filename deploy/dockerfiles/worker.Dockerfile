@@ -1,4 +1,4 @@
-# BullMQ worker (apps/worker): video → HLS, 履歴書 pages → PNG (Playwright screenshots of the web print route),
+# BullMQ worker (apps/worker): video → HLS (ffmpeg), 履歴書 pages → PDF + PNG (Playwright page.pdf of the web print route + pdftoppm),
 # CV extraction orchestration, mail. Debian-based for ffmpeg, Chromium and JP / Myanmar / Bengali fonts.
 # Build context: the repo root (pnpm workspace). The same image runs `prisma migrate deploy` (compose `migrate`).
 FROM node:22-bookworm-slim AS build
@@ -11,7 +11,7 @@ RUN pnpm --filter @rireki/worker build \
 
 FROM node:22-bookworm-slim AS runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ffmpeg fonts-noto-cjk fonts-noto-core fonts-noto-ui-core fonts-beng fonts-noto-extra \
+      ffmpeg poppler-utils fonts-dejavu-core fonts-noto-cjk fonts-noto-core fonts-noto-ui-core fonts-beng fonts-noto-extra \
       ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app

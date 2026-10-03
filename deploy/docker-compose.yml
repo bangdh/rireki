@@ -39,7 +39,12 @@ services:
       ACME_EMAIL: ${ACME_EMAIL}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - ..:/srv/design:ro            # the design mockups (index.html, app/, viewer/ …)
+      # Only the design mockups: never the repo root, which holds deploy/.env (every secret) and .git
+      - ../index.html:/srv/design/index.html:ro
+      - ../app:/srv/design/app:ro
+      - ../viewer:/srv/design/viewer:ro
+      - ../public:/srv/design/public:ro
+      - ../assets:/srv/design/assets:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
@@ -141,7 +146,7 @@ services:
     environment:
       <<: *app-env
       PORT: "3000"
-      RENDER_SECRET: ${RENDER_SECRET}
+      RENDER_SECRET: ${RENDER_SECRET:?RENDER_SECRET must be set in deploy/.env (32+ random chars)}
     depends_on:
       postgres:
         condition: service_healthy
@@ -168,7 +173,7 @@ services:
       <<: *app-env
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       WEB_INTERNAL_URL: http://web:3000
-      RENDER_SECRET: ${RENDER_SECRET}
+      RENDER_SECRET: ${RENDER_SECRET:?RENDER_SECRET must be set in deploy/.env (32+ random chars)}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
       EXTRACTOR_URL: http://extractor:8000

@@ -22,13 +22,14 @@ export const ShareSections = z.object({
 });
 export type ShareSections = z.infer<typeof ShareSections>;
 
-// "@Yamato-K.co.jp" → "yamato-k.co.jp"
+// "@Yamato-K.co.jp" → "yamato-k.co.jp". A named "domain" format without a message of its own, so the app's error map
+// can translate it (a schema-level message would outrank any map).
 export const EmailDomain = z
   .string()
   .trim()
   .toLowerCase()
   .transform((domain) => domain.replace(/^@/, ""))
-  .pipe(z.string().regex(/^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/, "Invalid domain"));
+  .pipe(z.stringFormat("domain", /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/));
 
 export const ShareLinkInput = z.object({
   candidateIds: z.array(z.string().min(1)).min(1).max(200),

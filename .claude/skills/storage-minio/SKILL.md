@@ -44,8 +44,8 @@ Never put a tenant's file under another tenant's prefix; always derive the prefi
 
 - Allowed download (link with `downloadAllowed`): `getSignedUrl(GetObjectCommand, { expiresIn: 300 })` with
   `ResponseContentDisposition: attachment` and a `ViewEvent(download)`.
-- View-only: never hand out a URL to the original; the API streams a watermarked PNG (`media-pipeline` skill) or a
-  signed HLS manifest.
+- View-only: never hand out a URL to the original; the API streams a watermarked PNG (`media-pipeline` skill) or HLS
+  whose every segment is authorised again (302 to a 60 s presigned GET).
 
 ## SeaweedFS specifics
 

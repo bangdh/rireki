@@ -1,125 +1,185 @@
+import { prisma } from "@rireki/db";
+import { CvDraft, JOB, type DocumentType } from "@rireki/shared";
 import { getTranslations } from "next-intl/server";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 import { Icon } from "@/components/Icon";
 import { ProtectedPage } from "@/components/ProtectedPage";
-import { Rirekisho } from "@/components/rirekisho/Rirekisho";
+import { ageAt, Rirekisho } from "@/components/rirekisho/Rirekisho";
 import { Watermark } from "@/components/Watermark";
-import { byCode, LINK, SAMPLE_CV, SAMPLE_CV_UPDATED_AT, TENANT, VIEWER } from "@/lib/sample";
+import { DOC_TYPE_LABEL } from "@/lib/candidates/format";
+import { logEvent } from "@/lib/shares/events";
+import { experienceLabel, initials, SITUATION_JA, stripSections } from "@/lib/shares/format";
+import { queue } from "@/lib/shares/mail";
+import { BUCKET, presignGet } from "@/lib/shares/s3";
+import { loadViewer, requireViewer } from "@/lib/shares/viewer";
 import { COUNTRY_JA, FLAGS } from "@/lib/ui";
 import { ViewerFooter, ViewerHeader } from "../../ViewerChrome";
+import { FeedbackForm, InterestButton } from "./FeedbackForm";
+import { Player } from "./Player";
+import { PrintButton, Tracking } from "./Tracking";
 
-// viewer/detail.html — view-only 履歴書 + videos for one candidate of the link.
-// TODO(share-viewer): candidate must belong to the link; view-only links serve the CV as watermarked PNG pages from
-// /api/s/{token}/cv/… (this React render is for download-allowed links and the print route); HLS player (hls.js) with signed
-// manifest; feedback Server Action (`interest` event + email); log `open_cv` + heartbeat duration; prev/next within the link.
-export default async function ViewerCandidatePage({ params }: { params: Promise<{ token: string; candidate: string }> }) {
+// viewer/detail.html — one candidate of the link: the 履歴書 (watermarked PNG pages from the media lane's /api/s/{token}/cv
+// route on view-only links, the React render otherwise), videos over signed HLS, shareable documents, feedback.
+type Params = { params: Promise<{ token: string; candidate: string }> };
+const docLabel = (type: string) => (type in DOC_TYPE_LABEL ? DOC_TYPE_LABEL[type as DocumentType] : "common.other");
+const mb = (bytes: number) => `${(bytes / 1_048_576).toFixed(1)} MB`;
+
+export async function generateMetadata({ params }: Params) {
   const { token, candidate } = await params;
-  const t = await getTranslations();
-  const c = byCode(candidate);
-  const wm = `${VIEWER.name} · ${VIEWER.email}`;
+  const ctx = await loadViewer(token);
+  const c = ctx?.link.candidates.find((x) => x.candidateId === candidate)?.candidate;
+  return { title: ctx ? [ctx.tenant.name, c?.nameKana].filter(Boolean).join(" · ") : "Rireki" };
+}
+
+export default async function ViewerCandidatePage({ params }: Params) {
+  const { token, candidate: candidateId } = await params;
+  const ctx = await requireViewer(token);
+  const { link, viewer, sections } = ctx;
+  const index = link.candidates.findIndex((x) => x.candidateId === candidateId);
+  if (index < 0) notFound();
+  const viewOnly = !link.downloadAllowed;
+  const [t, c, renders, feedback, eventId] = await Promise.all([
+    getTranslations(),
+    prisma.candidate.findFirst({
+      where: { id: candidateId, tenantId: link.tenantId },
+      include: { videos: { where: { status: "ready" }, orderBy: { position: "asc" } }, documents: { where: { shareable: true }, orderBy: { createdAt: "asc" } } },
+    }),
+    prisma.render.findMany({ where: { tenantId: link.tenantId, candidateId }, orderBy: [{ version: "desc" }, { page: "asc" }] }),
+    prisma.feedback.findFirst({ where: { shareLinkId: link.id, viewerId: viewer.id, candidateId } }),
+    // the one open_cv of this visit; <Tracking> adds 30 s to its durationSec per heartbeat
+    logEvent({ tenantId: link.tenantId, shareLinkId: link.id, viewerId: viewer.id, candidateId, type: "open_cv", durationSec: 0 }),
+  ]);
+  if (!c) notFound();
+  const pages = renders.filter((r) => r.version === renders[0]?.version); // latest rendered version only
+  if (viewOnly && pages.length === 0) {
+    // TODO(phase2): until the worker has rendered the PNGs the React 履歴書 shows under the watermark; ask for them.
+    // Same jobId as the media lane (render:{candidateId}:{version}) so the request dedupes; BullMQ only allows ':' in 3-part ids.
+    const version = Math.floor(c.updatedAt.getTime() / 1000);
+    void queue()
+      .add(JOB.renderPages, { tenantId: link.tenantId, candidateId: c.id, version }, { jobId: `render:${c.id}:${version}`, removeOnComplete: true, removeOnFail: true })
+      .catch((e) => console.error("[render] enqueue failed", e));
+  }
+  const cv = stripSections(CvDraft.safeParse(c.cv).data ?? {}, sections);
+  const photoUrl = sections.photo && c.photoKey ? await presignGet(BUCKET.originals, c.photoKey) : null;
+  const watermark = [viewer.name ?? t("track.anonymous"), viewer.email].filter(Boolean).join(" · ");
+  const nat = c.nationality && c.nationality in FLAGS ? (c.nationality as keyof typeof FLAGS) : null;
+  const age = c.dob ? ageAt(c.dob.toISOString().slice(0, 10), new Date()) : null;
+  const experience = experienceLabel(cv);
+  const prev = link.candidates[index - 1];
+  const next = link.candidates[index + 1];
+  const videos = sections.videos ? c.videos : [];
+  const docs = sections.documents ? c.documents : [];
+
   return (
     <>
-      <ViewerHeader token={token} back />
-      <main className="viewer-main protected-content">
+      <ViewerHeader ctx={ctx} token={token} back />
+      <main className={viewOnly ? "viewer-main protected-content" : "viewer-main"}>
         <div className="container">
           <div className="row between mb-16" style={{ alignItems: "flex-start" }}>
             <div className="row-nowrap" style={{ gap: "14px", alignItems: "flex-start" }}>
-              <span className="avatar-photo lg">{c.initials}</span>
+              {/* eslint-disable-next-line @next/next/no-img-element -- short-lived presigned S3 URL */}
+              {photoUrl ? <img className="avatar-photo lg" src={photoUrl} alt="" style={{ objectFit: "cover" }} draggable={false} /> : <span className="avatar-photo lg">{initials(c.nameLatin)}</span>}
               <div className="col" style={{ gap: "4px" }}>
-                <h1 style={{ fontSize: "24px" }}>{c.kana}</h1>
-                <div className="muted">{c.name} · <span className="mono">{c.code}</span></div>
+                <h1 style={{ fontSize: "24px" }}>{c.nameKana}</h1>
+                <div className="muted">{c.nameNative || c.nameLatin} · <span className="mono">{c.code}</span></div>
                 <div className="row" style={{ gap: "6px" }}>
-                  <span className="badge">{c.gender === "m" ? "男" : "女"} · {c.age}歳</span>
-                  <span className="badge">{FLAGS[c.nationality]} {COUNTRY_JA[c.nationality]}</span>
-                  <span className="badge badge-primary">JLPT {c.jlpt}</span>
-                  <span className="badge">{c.job} · 実務2年</span>
-                  <span className="badge">渡航可能 2027年1月</span>
+                  {(c.gender || age !== null) && <span className="badge">{[c.gender === "male" ? "男" : c.gender === "female" ? "女" : "", age !== null && `${age}歳`].filter(Boolean).join(" · ")}</span>}
+                  {nat && <span className="badge">{FLAGS[nat]} {COUNTRY_JA[nat]}</span>}
+                  {c.jlpt !== "none" && <span className="badge badge-primary">JLPT {c.jlpt}</span>}
+                  <span className="badge">{[c.tags[0], experience].filter(Boolean).join(" · ")}</span>
                 </div>
               </div>
             </div>
             <div className="row">
-              <button className="btn btn-icon hide-mobile" type="button" aria-label="Previous"><Icon name="chev-left" /></button>
-              <span className="small muted hide-mobile nums">1 / {LINK.candidateCount}</span>
-              <button className="btn btn-icon hide-mobile" type="button" aria-label="Next"><Icon name="chev-right" /></button>
-              <button className="btn btn-primary" type="button" id="interestBtn"><Icon name="star" /><span>{t("viewer.interested")}</span></button>
+              {prev ? <Link className="btn btn-icon hide-mobile" href={`/s/${token}/c/${prev.candidateId}`} prefetch={false} aria-label="Previous"><Icon name="chev-left" /></Link> : <button className="btn btn-icon hide-mobile" type="button" disabled aria-label="Previous"><Icon name="chev-left" /></button>}
+              <span className="small muted hide-mobile nums">{index + 1} / {link.candidates.length}</span>
+              {next ? <Link className="btn btn-icon hide-mobile" href={`/s/${token}/c/${next.candidateId}`} prefetch={false} aria-label="Next"><Icon name="chev-right" /></Link> : <button className="btn btn-icon hide-mobile" type="button" disabled aria-label="Next"><Icon name="chev-right" /></button>}
+              {sections.feedback && <InterestButton token={token} candidateId={c.id} interested={feedback?.verdict === "interested"} />}
             </div>
           </div>
+
           <div className="grid grid-main-aside">
             <div className="stack">
               <div className="row between">
                 <div className="row">
                   <span className="small muted">{t("detail.cv_lang")}</span>
-                  <div className="segmented"><button className="active" type="button">日本語</button><button type="button">English</button></div>
+                  {/* TODO(phase2): English rendition of the 履歴書 */}
+                  <div className="segmented"><button className="active" type="button">日本語</button><button type="button" disabled>English</button></div>
                 </div>
-                <span className="protected-notice"><Icon name="lock" className="ic-sm" /><span>{t("viewer.rendered")}</span></span>
+                {viewOnly ? <span className="protected-notice"><Icon name="lock" className="ic-sm" /><span>{t("viewer.rendered")}</span></span> : <PrintButton token={token} candidateId={c.id} />}
               </div>
               <div className="wm-host">
-                <Watermark text={wm} />
-                <Rirekisho cv={SAMPLE_CV} asOf={SAMPLE_CV_UPDATED_AT} hideContact />
+                {viewOnly && <Watermark text={watermark} />}
+                {viewOnly && pages.length > 0 ? (
+                  pages.map((p) => (
+                    // eslint-disable-next-line @next/next/no-img-element -- watermarked PNG streamed by /api/s/[token]/cv (media lane)
+                    <img key={p.page} src={`/api/s/${token}/cv/${c.id}/${p.page}`} alt="" draggable={false} style={{ width: "100%", display: "block" }} />
+                  ))
+                ) : (
+                  <Rirekisho cv={cv} asOf={c.updatedAt} photoUrl={photoUrl ?? undefined} hideContact={!sections.contact} hideFamily={!sections.family} hideHealth={!sections.health} hidePhoto={!sections.photo} />
+                )}
               </div>
             </div>
+
             <aside className="stack sticky-aside">
-              <section className="card">
-                <div className="card-header">
-                  <h3>{t("viewer.videos_t")}</h3>
-                  <span className="badge">{c.videos}</span>
-                </div>
-                <div className="card-body stack">
-                  <div className="player wm-host">
-                    <Watermark text={wm} light />
-                    <span className="video-thumb" style={{ position: "absolute", inset: "0", background: "transparent" }}><span className="play"><Icon name="play" /></span></span>
-                    <div className="controls">
-                      <Icon name="play" className="ic-sm" /><span>0:35</span><span className="prog"><i></i></span><span>1:32</span><Icon name="globe" className="ic-sm" />
-                    </div>
+              {sections.videos && (
+                <section className="card">
+                  <div className="card-header">
+                    <h3>{t("viewer.videos_t")}</h3>
+                    <span className="badge">{videos.length}</span>
                   </div>
-                  <div className="stack" style={{ gap: "6px" }}>
-                    {[
-                      { title: "自己紹介（日本語）", meta: "1:32 · 日本語", active: true },
-                      { title: "溶接実技デモ", meta: "2:45" },
-                      { title: "面接練習 Q&A", meta: "3:10 · 日本語" },
-                    ].map((v) => (
-                      <button key={v.title} className="doc-row" type="button" style={v.active ? { textAlign: "left", background: "var(--primary-soft)", borderColor: "var(--primary)" } : { textAlign: "left", background: "var(--surface)" }}>
-                        <Icon name="play" />
-                        <div className="grow"><div className="n">{v.title}</div><div className="m">{v.meta}</div></div>
-                      </button>
-                    ))}
+                  <div className="card-body stack">
+                    {videos.length > 0 ? (
+                      <Player token={token} videos={videos.map((v) => ({ id: v.id, title: v.title, lang: v.lang, durationSec: v.durationSec }))} watermark={watermark} viewOnly={viewOnly} />
+                    ) : (
+                      <span className="small muted">{t("common.none")}</span>
+                    )}
                   </div>
-                  <p className="hint">{t("viewer.video_hint")}</p>
-                </div>
-              </section>
+                </section>
+              )}
               <section className="card">
                 <div className="card-header"><h3>{t("viewer.summary")}</h3></div>
                 <div className="card-body">
                   <dl className="kv">
-                    <dt>{t("form.status")}</dt><dd>就職活動中</dd>
-                    <dt>{t("form.work")}</dt><dd>溶接工 1年10ヶ月（MIG/TIG）</dd>
-                    <dt>{t("form.licenses")}</dt><dd>溶接技能証明書 3G · JLPT N4（2025年12月）</dd>
-                    <dt>{t("form.ja_level")}</dt><dd>{SAMPLE_CV.jaLevel} / 10（当社評価）</dd>
-                    <dt>{t("form.en_level")}</dt><dd>{SAMPLE_CV.enLevel} / 10（当社評価）</dd>
-                    <dt>{t("form.wishes")}</dt><dd>勤務地：全国どこでも · 勤務時間：会社スケジュール</dd>
-                    <dt>{t("form.health")}</dt><dd>{SAMPLE_CV.heightCm} cm · {SAMPLE_CV.weightKg} kg · 服 {SAMPLE_CV.clothingSize} · 靴 {SAMPLE_CV.shoeCm} cm · アレルギー無</dd>
+                    <dt>{t("form.status")}</dt><dd>{SITUATION_JA[cv.situation ?? "job_hunting"]}</dd>
+                    <dt>{t("form.work")}</dt><dd>{[c.tags[0], experience].filter(Boolean).join(" · ")}</dd>
+                    <dt>{t("form.licenses")}</dt><dd>{(cv.licenses ?? []).map((l) => l.name).join(" · ") || "—"}</dd>
+                    <dt>{t("form.ja_level")}</dt><dd>{cv.jaLevel ?? "—"} / 10（当社評価）</dd>
+                    <dt>{t("form.en_level")}</dt><dd>{cv.enLevel ?? "—"} / 10（当社評価）</dd>
+                    <dt>{t("form.wishes")}</dt><dd>{[cv.wishLocation && `勤務地：${cv.wishLocation}`, cv.wishHours && `勤務時間：${cv.wishHours}`].filter(Boolean).join(" · ") || "—"}</dd>
+                    {sections.health && (
+                      <>
+                        <dt>{t("form.health")}</dt>
+                        <dd>{[cv.heightCm && `${cv.heightCm} cm`, cv.weightKg && `${cv.weightKg} kg`, cv.clothingSize && `服 ${cv.clothingSize}`, cv.shoeCm && `靴 ${cv.shoeCm} cm`].filter(Boolean).join(" · ") || "—"}</dd>
+                      </>
+                    )}
                   </dl>
                 </div>
               </section>
-              <section className="card">
-                <div className="card-header"><h3>{t("viewer.feedback")}</h3></div>
-                <div className="card-body stack">
-                  <div className="row" style={{ gap: "6px" }}>
-                    <button className="filter-chip active" type="button"><Icon name="star" className="ic-sm" style={{ color: "var(--warning)" }} /><span>{t("viewer.interested")}</span></button>
-                    <button className="filter-chip" type="button">{t("viewer.maybe")}</button>
-                    <button className="filter-chip" type="button">{t("viewer.pass")}</button>
+              {docs.length > 0 && (
+                <section className="card">
+                  <div className="card-header"><h3>{t("detail.tab_docs")}</h3><span className="badge">{docs.length}</span></div>
+                  <div className="card-body stack" style={{ gap: "6px" }}>
+                    {docs.map((d) => (
+                      <div key={d.id} className="doc-row">
+                        <Icon name="file" />
+                        <div className="grow"><div className="n">{d.name}</div><div className="m">{t(docLabel(d.type))} · {mb(d.size)}</div></div>
+                        {link.downloadAllowed && <a className="btn btn-ghost btn-icon btn-sm" href={`/api/s/${token}/download/${d.id}`} aria-label={t("shares.download_allowed")}><Icon name="download" /></a>}
+                      </div>
+                    ))}
                   </div>
-                  <textarea className="textarea" style={{ minHeight: "70px" }} defaultValue="10月8日 10:00に面接希望です。" aria-label={t("viewer.feedback")} />
-                  <button className="btn btn-primary" type="button">{t("viewer.send_feedback")}</button>
-                  <p className="hint">{t("viewer.feedback_hint")}</p>
-                </div>
-              </section>
-              <div className="callout small"><Icon name="lock" /><div>{t("viewer.protection_note")}</div></div>
+                </section>
+              )}
+              {sections.feedback && <FeedbackForm token={token} candidateId={c.id} current={feedback?.verdict ?? null} comment={feedback?.comment ?? null} tenant={ctx.tenant.name} />}
+              {viewOnly && <div className="callout small"><Icon name="lock" /><div>{t("viewer.protection_note")}</div></div>}
             </aside>
           </div>
         </div>
       </main>
-      <ViewerFooter />
-      <ProtectedPage printMessage={`${TENANT.name}: printing is disabled for this link.`} />
+      <ViewerFooter ctx={ctx} />
+      <Tracking token={token} eventId={eventId} candidateId={c.id} protect={viewOnly} />
+      {viewOnly && <ProtectedPage printMessage={`${ctx.tenant.name}: ${t("ui.blocked")}`} />}
     </>
   );
 }

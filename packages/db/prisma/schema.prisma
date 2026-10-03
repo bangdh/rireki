@@ -97,6 +97,7 @@ model Member {
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           String       @default("member")
+  branch         String? // Rireki: office label (members.branch), copied from the invitation
   createdAt      DateTime
 
   @@index([organizationId])
@@ -110,6 +111,7 @@ model Invitation {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   email          String
   role           String?
+  branch         String? // Rireki: office label (members.branch)
   status         String       @default("pending")
   expiresAt      DateTime
   createdAt      DateTime     @default(now())
@@ -322,6 +324,7 @@ model AuditLog {
   action    String
   target    String?
   ip        String?
+  meta      Json?
   createdAt DateTime @default(now())
 
   @@index([tenantId, createdAt])

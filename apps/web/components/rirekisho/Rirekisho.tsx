@@ -1,21 +1,24 @@
 import React from "react";
 import type { CSSProperties, ReactNode } from "react";
-import type { Cv } from "@rireki/shared";
+import type { CvDraft } from "@rireki/shared";
+import { useTimeZone } from "next-intl";
 import { COUNTRY_JA } from "@/lib/ui";
 
 const SITUATION_JA = { job_hunting: "就職活動中", in_training: "研修中", employed: "在職中", offer: "内定" } as const;
 const HIDDEN = <span className="hidden-note">送出機関の設定により非表示（連絡先は送出機関へ）</span>;
+const WITHHELD = <span className="hidden-note">送出機関の設定により非表示</span>;
 
 /** "2024-03" → ["2024", "3"] */
 const ym = (s?: string): [string, string] => (s ? [s.slice(0, 4), String(Number(s.slice(5, 7)))] : ["", ""]);
-/** "2002-03-15" → "2002年3月15日" */
-export const dateJa = (iso: string) => {
-  const [y, m, d] = iso.split("-").map(Number);
-  return `${y}年${m}月${d}日`;
+/** "2002-03-15" → "2002年3月15日"; an empty or malformed date (draft) renders as "". */
+export const dateJa = (iso?: string) => {
+  const [y, m, d] = (iso ?? "").split("-").map(Number);
+  return y && m && d ? `${y}年${m}月${d}日` : "";
 };
-/** Full years between dob and asOf. */
-export function ageAt(dob: string, asOf: Date) {
-  const [y, m, d] = dob.split("-").map(Number);
+/** Full years between dob and asOf; null when dob is missing (draft). */
+export function ageAt(dob: string | undefined, asOf: Date): number | null {
+  const [y, m, d] = (dob ?? "").split("-").map(Number);
+  if (!y || !m || !d) return null;
   let age = asOf.getFullYear() - y;
   if (asOf.getMonth() + 1 < m || (asOf.getMonth() + 1 === m && asOf.getDate() < d)) age--;
   return age;
@@ -32,7 +35,8 @@ function Row({ date, text, kind }: { date?: string; text: ReactNode; kind?: stri
   );
 }
 
-function LangScale({ value, label, note }: { value: number; label: string; note: string }) {
+/** 当社評価 on the 0–10 scale; not assessed yet → "—" and no mark (the "—" of every other empty field). */
+function LangScale({ value, label, note }: { value?: number; label: string; note: string }) {
   return (
     <>
       <div className="lang-scale" style={{ "--v": value } as CSSProperties}>
@@ -40,40 +44,50 @@ function LangScale({ value, label, note }: { value: number; label: string; note:
           <span key={i} className="tick" style={{ left: `${i * 10}%` }}>{i}</span>
         ))}
         <span className="track"></span>
-        <span className="mark"></span>
+        {value !== undefined && <span className="mark"></span>}
       </div>
-      <div className="lang-note"><b>{label}（当社評価）{value} / 10</b>　{note}</div>
+      <div className="lang-note"><b>{label}（当社評価）{value === undefined ? "—" : `${value} / 10`}</b>　{note}</div>
     </>
   );
 }
 
 type Props = {
-  cv: Cv; // the Json body validated by CvSchema (packages/shared/src/cv.ts)
+  cv: CvDraft; // the Json body validated by CvSchema (packages/shared/src/cv.ts); a draft may still miss fields
   /** date printed as 「現在」 and used for the age (the candidate's updatedAt) */
   asOf: Date;
   photoUrl?: string;
   /** viewer links with the contact section switched off */
   hideContact?: boolean;
+  /** viewer links with the family / body & health / photo sections switched off: the note, never 無, — or the 写真 placeholder */
+  hideFamily?: boolean;
+  hideHealth?: boolean;
+  hidePhoto?: boolean;
+  /** zone of the 「現在」 date; defaults to the request's (the tenant's on a tenant host, i18n/request.ts) — /print has no tenant host */
+  timeZone?: string;
 };
 
 /** The company's Japanese 履歴書 render (always Japanese, whatever the UI language). Same component for detail, viewer and print. */
-export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
-  const asOfIso = asOf.toISOString().slice(0, 10);
+export function Rirekisho({ cv, asOf, photoUrl, hideContact = false, hideFamily = false, hideHealth = false, hidePhoto = false, timeZone }: Props) {
+  const requestZone = useTimeZone();
+  const asOfJa = new Intl.DateTimeFormat("ja-JP", { dateStyle: "long", timeZone: timeZone ?? requestZone }).format(asOf); // 2026年10月3日
   const contact = (value?: string) => (hideContact ? HIDDEN : value);
+  const family = (value: ReactNode) => (hideFamily ? WITHHELD : value);
+  const health = (value: ReactNode) => (hideHealth ? WITHHELD : value);
   const unit = (v: number | undefined, u: string) => (v === undefined ? "—" : `${v} ${u}`);
+  const age = ageAt(cv.dob, asOf);
   return (
     <article className="rirekisho" lang="ja">
       <div className="doc-title">
         <h2>履歴書</h2>
-        <span className="date">{dateJa(asOfIso)}現在</span>
+        <span className="date">{asOfJa}現在</span>
       </div>
       <table>
         <tbody>
           <tr>
             <th>家族構成</th>
-            <td>{cv.familyCount !== undefined && `家族：${cv.familyCount}人`}{cv.familyDetail && `（${cv.familyDetail}）`}</td>
+            <td>{family(<>{cv.familyCount !== undefined && `家族：${cv.familyCount}人`}{cv.familyDetail && `（${cv.familyDetail}）`}</>)}</td>
             <th>状況</th>
-            <td>{SITUATION_JA[cv.situation]}</td>
+            <td>{SITUATION_JA[cv.situation ?? "job_hunting"]}</td>
           </tr>
         </tbody>
       </table>
@@ -83,7 +97,9 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
             <th>フリガナ</th>
             <td colSpan={3} className="kana-row">{cv.nameKana}</td>
             <td rowSpan={6} className="photo-cell">
-              {photoUrl ? (
+              {hidePhoto ? (
+                WITHHELD
+              ) : photoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element -- presigned URL, plain <img> as in the print route
                 <img src={photoUrl} alt="" style={{ width: 80, height: 104, objectFit: "cover" }} />
               ) : (
@@ -98,12 +114,12 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
           <tr>
             <th>生年月日</th>
             <td>{dateJa(cv.dob)}</td>
-            <td className="c">{ageAt(cv.dob, asOf)}歳</td>
-            <td>性別　{cv.gender === "male" ? "男" : "女"}</td>
+            <td className="c">{age === null ? "" : `${age}歳`}</td>
+            <td>性別　{cv.gender === "male" ? "男" : cv.gender === "female" ? "女" : ""}</td>
           </tr>
           <tr>
             <th>国籍</th>
-            <td>{COUNTRY_JA[cv.nationality]}</td>
+            <td>{cv.nationality ? COUNTRY_JA[cv.nationality] : ""}</td>
             <th>携帯電話番号</th>
             <td>{contact(cv.mobile)}</td>
           </tr>
@@ -125,7 +141,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }}>学歴</th><th>入学・卒業</th></tr>
-          {cv.education.map((e, i) => (
+          {(cv.education ?? []).map((e, i) => (
             <React.Fragment key={i}>
               <Row date={e.from} text={e.school} kind="入学" />
               {e.to && <Row date={e.to} text={e.school} kind="卒業" />}
@@ -137,7 +153,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }}>職歴</th><th>入社・退職</th></tr>
-          {cv.work.map((w, i) => (
+          {(cv.work ?? []).map((w, i) => (
             <React.Fragment key={i}>
               <Row date={w.from} text={w.employer} kind="入社" />
               {w.to && <Row date={w.to} text={w.employer} kind="退職" />}
@@ -163,7 +179,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <table className="list">
         <tbody>
           <tr><th>年</th><th>月</th><th style={{ width: "auto", textAlign: "left" }} colSpan={2}>免許・資格</th></tr>
-          {cv.licenses.map((l, i) => (
+          {(cv.licenses ?? []).map((l, i) => (
             <Row key={i} date={l.date} text={l.issuer ? `${l.name}（${l.issuer}）` : l.name} />
           ))}
         </tbody>
@@ -173,11 +189,11 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
         <tbody>
           <tr>
             <th>日本語</th>
-            <td><LangScale value={cv.jaLevel ?? 0} label="日本語会話レベル" note="※日本人同士の会話を10とした場合に、日本語会話能力がどの程度のレベルに達しているのかを10段階で評価したものです。" /></td>
+            <td><LangScale value={cv.jaLevel} label="日本語会話レベル" note="※日本人同士の会話を10とした場合に、日本語会話能力がどの程度のレベルに達しているのかを10段階で評価したものです。" /></td>
           </tr>
           <tr>
             <th>英語</th>
-            <td><LangScale value={cv.enLevel ?? 0} label="英語会話レベル" note="※英語話者同士の会話を10とした場合の10段階評価です。" /></td>
+            <td><LangScale value={cv.enLevel} label="英語会話レベル" note="※英語話者同士の会話を10とした場合の10段階評価です。" /></td>
           </tr>
         </tbody>
       </table>
@@ -187,7 +203,7 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <div className="para">{cv.motivationPr}</div>
       <table>
         <tbody>
-          <tr><th>配偶者</th><td>{cv.spouse ? "有" : "無"}</td><th>配偶者の扶養義務</th><td>{cv.spouseDependency ? "有" : "無"}</td></tr>
+          <tr><th>配偶者</th><td>{family(cv.spouse ? "有" : "無")}</td><th>配偶者の扶養義務</th><td>{family(cv.spouseDependency ? "有" : "無")}</td></tr>
         </tbody>
       </table>
       <div className="sec">その他・本人希望</div>
@@ -201,16 +217,22 @@ export function Rirekisho({ cv, asOf, photoUrl, hideContact = false }: Props) {
       <div className="sec">身体情報</div>
       <table>
         <tbody>
-          <tr><th>身長</th><td>{unit(cv.heightCm, "cm")}</td><th>体重</th><td>{unit(cv.weightKg, "kg")}</td></tr>
-          <tr><th>服のサイズ</th><td>{cv.clothingSize ?? "—"}</td><th>肩（上半身）</th><td>{unit(cv.shoulderCm, "cm")}</td></tr>
-          <tr><th>ウエスト（下半身）</th><td>{unit(cv.waistCm, "cm")}</td><th>靴のサイズ</th><td>{unit(cv.shoeCm, "cm")}</td></tr>
+          {hideHealth ? (
+            <tr><td>{WITHHELD}</td></tr>
+          ) : (
+            <>
+              <tr><th>身長</th><td>{unit(cv.heightCm, "cm")}</td><th>体重</th><td>{unit(cv.weightKg, "kg")}</td></tr>
+              <tr><th>服のサイズ</th><td>{cv.clothingSize ?? "—"}</td><th>肩（上半身）</th><td>{unit(cv.shoulderCm, "cm")}</td></tr>
+              <tr><th>ウエスト（下半身）</th><td>{unit(cv.waistCm, "cm")}</td><th>靴のサイズ</th><td>{unit(cv.shoeCm, "cm")}</td></tr>
+            </>
+          )}
         </tbody>
       </table>
       <table>
         <tbody>
-          <tr><th>宗教的に注意が必要な事項</th><td>{cv.religionNotes || "—"}</td></tr>
-          <tr><th>食べられないもの</th><td>{cv.foodRestrictions || "—"}</td></tr>
-          <tr><th>アレルギー</th><td>{cv.allergies || "—"}</td></tr>
+          <tr><th>宗教的に注意が必要な事項</th><td>{health(cv.religionNotes || "—")}</td></tr>
+          <tr><th>食べられないもの</th><td>{health(cv.foodRestrictions || "—")}</td></tr>
+          <tr><th>アレルギー</th><td>{health(cv.allergies || "—")}</td></tr>
           <tr><th>その他連絡事項</th><td>{cv.otherNotes || "—"}</td></tr>
         </tbody>
       </table>

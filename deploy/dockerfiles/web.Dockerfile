@@ -13,6 +13,9 @@ RUN cp .env.example .env && pnpm --filter @rireki/web build && rm .env
 FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000 HOSTNAME=0.0.0.0
+# Fonts for the per-viewer watermark sharp burns into the 履歴書 PNGs (lib/storage/watermark.ts): without them every glyph
+# is a box. Noto Sans CJK JP for the clients' Japanese names; the build fails if the family is missing.
+RUN apk add --no-cache fontconfig font-dejavu font-noto-cjk && fc-list | grep -q 'Noto Sans CJK JP'
 RUN addgroup -S app && adduser -S app -G app
 COPY --from=build --chown=app:app /app/apps/web/.next/standalone ./
 COPY --from=build --chown=app:app /app/apps/web/.next/static ./apps/web/.next/static

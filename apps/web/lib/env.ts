@@ -22,7 +22,7 @@ export const env = z
     S3_BUCKET_UPLOADS: z.string(),
     S3_BUCKET_PUBLIC: z.string(),
     SESSION_SECRET: z.string().min(32),
-    RENDER_SECRET: z.string(),
+    RENDER_SECRET: z.string().min(32), // shared with the worker; empty or placeholder values must not boot (the print route trusts it)
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string(),
   })

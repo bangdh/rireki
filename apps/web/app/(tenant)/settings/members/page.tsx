@@ -1,12 +1,18 @@
-import { getTranslations } from "next-intl/server";
+import { prisma } from "@rireki/db";
+import { getFormatter, getTranslations } from "next-intl/server";
 import { Icon } from "@/components/Icon";
 import { Menu } from "@/components/Menu";
 import { Table } from "@/components/Table";
-import { MEMBERS } from "@/lib/sample";
+import { initials } from "@/lib/auth-schemas";
+import { When } from "@/lib/candidates/When";
+import { requireRole } from "@/lib/tenant";
+import { AutoSubmit } from "../../candidates/AutoSubmit";
+import { Feedback } from "../Feedback";
+import { cancelInvite, reactivateMember, removeMember, resendInvite, suspendMember } from "./actions";
 import { InviteMember } from "./InviteMember";
+import { RoleSelect } from "./RoleSelect";
 
-// app/settings-members.html. TODO(auth-tenant): members + invitations from better-auth organization, role change / suspend /
-// remove / resend Server Actions with requireRole("admin"); 403 for the user role.
+// app/settings-members.html. Branch is a free-text label on Member/Invitation (TODO(phase2): roles per branch). Phase 1 is free: no seats line.
 const PERMS = [
   ["perm.candidates_edit", "y", "y"],
   ["perm.candidates_archive", "y", "own"],
@@ -18,76 +24,118 @@ const PERMS = [
   ["perm.settings", "y", "n"],
   ["perm.audit", "y", "n"],
 ] as const;
+const ERRORS = ["roles_d"] as const;
+const isAdmin = (role: string) => role === "owner" || role === "admin";
 
-export default async function MembersSettingsPage() {
-  const t = await getTranslations();
+export default async function MembersSettingsPage({ searchParams }: { searchParams: Promise<{ q?: string; role?: string; branch?: string; error?: string }> }) {
+  const { q = "", role: roleFilter = "", branch: branchFilter = "", error } = await searchParams;
+  const { tenant, user: me } = await requireRole("admin");
+  const [t, f] = await Promise.all([getTranslations(), getFormatter()]);
+  const [members, invitations] = await Promise.all([
+    prisma.member.findMany({ where: { organizationId: tenant.id }, include: { user: { select: { name: true, email: true } } }, orderBy: { createdAt: "asc" } }),
+    prisma.invitation.findMany({ where: { organizationId: tenant.id, status: "pending" }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const sessions = await prisma.session.groupBy({ by: ["userId"], where: { userId: { in: members.map((m) => m.userId) } }, _max: { updatedAt: true } });
+  const lastActive = new Map(sessions.map((s) => [s.userId, s._max.updatedAt]));
+  const counts = { admins: members.filter((m) => isAdmin(m.role)).length, users: members.filter((m) => m.role === "member").length, invited: invitations.length };
+  const branches = [...new Set([...members, ...invitations].map((x) => x.branch).filter((b): b is string => Boolean(b)))].sort();
+  const needle = q.trim().toLowerCase();
+  const shown = (name: string, email: string, role: string, branch: string | null) =>
+    (!needle || `${name} ${email}`.toLowerCase().includes(needle)) && (!roleFilter || roleFilter === (isAdmin(role) ? "admin" : role)) && (!branchFilter || branchFilter === branch);
   const cell = (v: "y" | "n" | "own" | "if_enabled") =>
     v === "y" ? <td className="y">✓</td> : v === "n" ? <td className="n">—</td> : <td className="p">{t(v === "own" ? "perm.own_only" : "perm.if_enabled")}</td>;
+  const when = (userId: string) => {
+    if (userId === me.id) return t("common.now");
+    const at = lastActive.get(userId);
+    return at ? <When date={at} /> : "—";
+  };
+
   return (
     <div className="stack-lg">
       <div className="row between">
         <div>
           <h2>{t("nav.members")}</h2>
-          <p className="muted small">2 <span>{t("role.admins")}</span> · 5 <span>{t("role.users")}</span> · 1 <span>{t("common.invited_lc")}</span> · <span>{t("members.seats")}</span></p>
+          <p className="muted small">{counts.admins} <span>{t("role.admins")}</span> · {counts.users} <span>{t("role.users")}</span> · {counts.invited} <span>{t("common.invited_lc")}</span></p>
         </div>
-        <InviteMember />
+        <InviteMember defaultLang={tenant.settings.defaultLang} branches={branches} />
       </div>
+      <Feedback error={error && (ERRORS as readonly string[]).includes(error) ? t(`members.${error as (typeof ERRORS)[number]}`) : null} />
       <section className="card">
-        <div className="table-toolbar">
-          <div className="search input-wrap"><Icon name="search" /><input className="input input-sm" name="q" placeholder={t("members.search_ph")} /></div>
-          <select className="select select-sm" style={{ width: "auto" }} aria-label={t("common.role")}><option value="">{t("common.role")}</option><option value="admin">{t("role.admin")}</option><option value="member">{t("role.user")}</option></select>
-          <select className="select select-sm" style={{ width: "auto" }} aria-label={t("members.branch")}><option value="">{t("members.branch")}</option><option>Hà Nội HQ</option><option>Yangon</option><option>Dhaka</option></select>
-        </div>
+        <form className="table-toolbar" method="get">
+          <div className="search input-wrap"><Icon name="search" /><input className="input input-sm" name="q" defaultValue={q} placeholder={t("members.search_ph")} /></div>
+          <select className="select select-sm" name="role" defaultValue={roleFilter} style={{ width: "auto" }} aria-label={t("common.role")}>
+            <option value="">{t("common.role")}</option><option value="admin">{t("role.admin")}</option><option value="member">{t("role.user")}</option>
+          </select>
+          <select className="select select-sm" name="branch" defaultValue={branchFilter} style={{ width: "auto" }} aria-label={t("members.branch")}>
+            <option value="">{t("members.branch")}</option>{branches.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+          <AutoSubmit />
+        </form>
         <div className="table-wrap">
           <Table className="table">
             <thead>
               <tr><th>{t("members.member")}</th><th>{t("common.role")}</th><th>{t("members.branch")}</th><th>{t("common.status")}</th><th>{t("members.last_active")}</th><th></th></tr>
             </thead>
             <tbody>
-              {MEMBERS.map((m) => (
-                <tr key={m.email} style={m.status === "suspended" ? { opacity: ".7" } : undefined}>
+              {members.filter((m) => shown(m.user.name, m.user.email, m.role, m.branch)).map((m) => {
+                const self = m.userId === me.id;
+                const suspended = m.role === "suspended";
+                return (
+                  <tr key={m.id} style={suspended ? { opacity: ".7" } : undefined}>
+                    <td>
+                      <div className="person">
+                        <span className="avatar">{initials(m.user.name)}</span>
+                        <div>
+                          <div className="n">{m.user.name} {self && <span className="badge badge-outline">{t("common.you")}</span>}</div>
+                          <div className="k">{m.user.email}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td>{suspended ? <span className="badge">{t("role.user")}</span> : <RoleSelect memberId={m.id} role={isAdmin(m.role) ? "admin" : "member"} disabled={self} />}</td>
+                    <td>{m.branch ?? "—"}</td>
+                    <td>{suspended ? <span className="badge badge-danger badge-dot">{t("common.suspended")}</span> : <span className="badge badge-success badge-dot">{t("common.active")}</span>}</td>
+                    <td className="small muted">{when(m.userId)}</td>
+                    <td>
+                      {suspended ? (
+                        <div className="row-actions"><form action={reactivateMember.bind(null, m.id)}><button className="btn btn-sm" type="submit">{t("members.reactivate")}</button></form></div>
+                      ) : (
+                        !self && (
+                          <div className="row-actions">
+                            <Menu>
+                              <summary className="btn btn-ghost btn-icon btn-sm"><Icon name="more" /></summary>
+                              <div className="menu-list">
+                                <form action={suspendMember.bind(null, m.id)}><button type="submit"><Icon name="ban" /><span>{t("members.suspend")}</span></button></form>
+                                <hr />
+                                <form action={removeMember.bind(null, m.id)}><button type="submit" className="danger"><Icon name="trash" /><span>{t("members.remove")}</span></button></form>
+                              </div>
+                            </Menu>
+                          </div>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {invitations.filter((i) => shown("", i.email, i.role ?? "member", i.branch)).map((i) => (
+                <tr key={i.id}>
                   <td>
                     <div className="person">
-                      <span className="avatar">{m.initials}</span>
+                      <span className="avatar">{initials(i.email)}</span>
                       <div>
-                        <div className="n">{m.name} {m.me && <span className="badge badge-outline">{t("common.you")}</span>}</div>
-                        <div className="k">{m.email}</div>
+                        <div className="n">{i.email}</div>
+                        <div className="k">{t("common.invited")}</div>
                       </div>
                     </div>
                   </td>
+                  <td><span className="badge">{t(i.role === "admin" ? "role.admin" : "role.user")}</span></td>
+                  <td>{i.branch ?? "—"}</td>
+                  <td><span className="badge badge-info badge-dot">{t("common.invited")}</span> <span className="small muted">{t("members.expires_on", { date: f.dateTime(i.expiresAt, { day: "numeric", month: "short" }) })}</span></td>
+                  <td className="small muted">—</td>
                   <td>
-                    {m.status === "active" ? (
-                      <select className="select select-sm" style={{ width: "auto" }} defaultValue={m.role} aria-label={t("common.role")}>
-                        <option value="admin">{t("role.admin")}</option><option value="user">{t("role.user")}</option>
-                      </select>
-                    ) : (
-                      <span className="badge">{t(`role.${m.role}`)}</span>
-                    )}
-                  </td>
-                  <td>{m.branch}</td>
-                  <td>
-                    {m.status === "active" && <span className="badge badge-success badge-dot">{t("common.active")}</span>}
-                    {m.status === "invited" && <><span className="badge badge-info badge-dot">{t("common.invited")}</span> <span className="small muted">{t("members.expires_3d")}</span></>}
-                    {m.status === "suspended" && <span className="badge badge-danger badge-dot">{t("common.suspended")}</span>}
-                  </td>
-                  <td className="small muted">{[m.lastActive.time, m.lastActive.day && t(`common.${m.lastActive.day}`)].filter(Boolean).join(" ")}</td>
-                  <td>
-                    {m.status === "active" && !m.me && (
-                      <div className="row-actions">
-                        <Menu>
-                          <summary className="btn btn-ghost btn-icon btn-sm"><Icon name="more" /></summary>
-                          <div className="menu-list">
-                            <button type="button"><Icon name="ban" /><span>{t("members.suspend")}</span></button>
-                            <hr />
-                            <button type="button" className="danger"><Icon name="trash" /><span>{t("members.remove")}</span></button>
-                          </div>
-                        </Menu>
-                      </div>
-                    )}
-                    {m.status === "invited" && (
-                      <div className="row-actions"><button className="btn btn-sm" type="button">{t("members.resend")}</button><button className="btn btn-ghost btn-icon btn-sm" type="button" aria-label="Cancel invitation"><Icon name="x" /></button></div>
-                    )}
-                    {m.status === "suspended" && <div className="row-actions"><button className="btn btn-sm" type="button">{t("members.reactivate")}</button></div>}
+                    <div className="row-actions">
+                      <form action={resendInvite.bind(null, i.id)}><button className="btn btn-sm" type="submit">{t("members.resend")}</button></form>
+                      <form action={cancelInvite.bind(null, i.id)}><button className="btn btn-ghost btn-icon btn-sm" type="submit" aria-label={t("common.cancel")}><Icon name="x" /></button></form>
+                    </div>
                   </td>
                 </tr>
               ))}

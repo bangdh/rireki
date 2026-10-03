@@ -20,10 +20,12 @@ s3.{$DOMAIN} {
 	}
 }
 
-# The design mockups, served as static files from the repository root
+# The design mockups, served as static files (compose mounts only index.html, app/, viewer/, public/, assets/)
 design.{$DOMAIN} {
 	root * /srv/design
-	file_server
+	file_server {
+		hide .env .git
+	}
 	encode zstd gzip
 }
 

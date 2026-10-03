@@ -25,11 +25,13 @@ export const env = z
     S3_BUCKET_PUBLIC: z.string(),
     WORKER_CONCURRENCY: z.coerce.number().default(2),
     WEB_INTERNAL_URL: z.url(),
-    RENDER_SECRET: z.string(),
+    RENDER_SECRET: z.string().min(32), // sent as x-render-key to the web print route; same rule as apps/web/lib/env.ts
     EXTRACTOR_URL: z.url(),
     ANTHROPIC_API_KEY: z.string().optional(),
     ANTHROPIC_MODEL: z.string().default("claude-opus-5-5"),
     SMTP_URL: z.string().optional(),
     MAIL_FROM: z.string(),
+    // ffmpeg drawtext font for the static video watermark (ASCII text, so DejaVu from fonts-dejavu-core is enough)
+    WATERMARK_FONT: z.string().default("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
   })
   .parse(process.env);
